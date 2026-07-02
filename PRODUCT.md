@@ -31,9 +31,11 @@ beyond pasting a Gemini API key once (and, for sharing, one invite code ever).
 
 ## Brand Personality
 
-**Calm, focused, premium — the tool disappears into the task.** Late-night code-editor
-indigo: a quiet dark surface where the waveform and the record control carry all the
-energy. Nothing decorative, nothing cluttered, no audio-engineer chrome.
+**Calm, focused, premium — the tool disappears into the task.** A quiet warm
+surface (soft near-black at night, true paper in the light) where the waveform
+and the record control carry all the energy; a native serif gives titles and
+transcripts the feel of a page rather than a log. Nothing decorative, nothing
+cluttered, no audio-engineer chrome.
 
 - Voice: quiet and exact. Plain labels, no cuteness.
 - Three words: **calm · focused · trustworthy.**

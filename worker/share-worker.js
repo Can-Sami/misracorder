@@ -144,13 +144,14 @@ function page(status, title, body, isFull = false) {
 <title>${esc(title)} — Misracorder</title>
 <style>
   :root {
-    --bg: oklch(0.14 0.006 264);
-    --surface: oklch(0.185 0.007 264);
-    --border: oklch(1 0 0 / 0.09);
-    --ink: oklch(0.97 0 0);
-    --ink-2: oklch(0.76 0.01 264);
-    --muted: oklch(0.63 0.012 264);
+    --bg: oklch(0.205 0.006 84);
+    --surface: oklch(0.24 0.007 84);
+    --border: oklch(0.95 0.02 84 / 0.09);
+    --ink: oklch(0.955 0.005 84);
+    --ink-2: oklch(0.79 0.009 84);
+    --muted: oklch(0.66 0.011 84);
     --primary: oklch(0.62 0.17 264);
+    --serif: ui-serif, "New York", Georgia, "Times New Roman", serif;
   }
   * { box-sizing: border-box; margin: 0; }
   body {
@@ -165,23 +166,32 @@ function page(status, title, body, isFull = false) {
   header { margin-bottom: 28px; }
   .mark {
     display: inline-flex; align-items: center; gap: 8px;
-    font-size: 0.8125rem; font-weight: 600; color: var(--muted);
-    margin-bottom: 22px;
+    font-family: var(--serif); font-style: italic;
+    font-size: 0.9375rem; font-weight: 600; color: var(--muted);
+    margin-bottom: 24px;
   }
   .mark svg { color: var(--primary); }
-  h1 { font-size: 1.375rem; font-weight: 650; letter-spacing: -0.01em; }
-  .meta { margin-top: 6px; font-size: 0.8125rem; color: var(--muted); }
-  audio { width: 100%; margin: 4px 0 30px; }
-  .turn { margin-bottom: 18px; }
+  h1 {
+    font-family: var(--serif);
+    font-size: 1.625rem; font-weight: 650; letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  .meta { margin-top: 7px; font-size: 0.8125rem; color: var(--muted); }
+  audio { width: 100%; margin: 6px 0 32px; }
+  .turn { margin-bottom: 20px; }
   .chip {
     display: inline-block; padding: 1px 9px; border-radius: 999px;
     font-size: 0.71875rem; font-weight: 600; letter-spacing: 0.01em;
     color: oklch(0.8 0.1 var(--h, 210));
     background: oklch(0.65 0.13 var(--h, 210) / 0.14);
-    margin-bottom: 4px;
+    margin-bottom: 5px;
   }
-  .turn p, .line { color: var(--ink-2); }
-  .line { margin-bottom: 10px; }
+  .turn p, .line {
+    font-family: var(--serif);
+    font-size: 1.0625rem; line-height: 1.7;
+    color: var(--ink-2);
+  }
+  .line { margin-bottom: 12px; }
   .line b { color: var(--ink); font-weight: 600; }
   .empty { color: var(--muted); }
   footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--muted); }

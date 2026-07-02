@@ -967,7 +967,7 @@ function renderDetail(rec) {
   if (document.activeElement !== $('detailTitle')) {
     $('detailTitle').value = rec.title || timeLabel(rec.createdAt);
   }
-  $('detailSub').textContent = `${new Date(rec.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}  ·  ${fmtDuration(rec.durationSec)}  ·  ${rec.model || ''}`.trim();
+  $('detailSub').textContent = `${new Date(rec.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}  ·  ${fmtDuration(rec.durationSec)}`;
 
   const rb = $('retranscribeBtn');
   if (rb) {

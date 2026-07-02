@@ -1,34 +1,36 @@
 # Design System — Misracorder
 
-A refined dark capture tool. The surface stays neutral and quiet; a single cobalt/indigo
-carries the brand, and one warm color is reserved exclusively for the live recording state.
-Color strategy: **Restrained** (tinted-neutral surfaces + one accent).
+A calm capture tool with a paper soul. Surfaces are warm quiet neutrals (soft
+near-black at night, true warm paper in the light theme); a single cobalt/indigo
+carries the brand; a native serif (New York) carries titles, day headers, and
+transcript prose; one warm coral is reserved exclusively for the live recording
+state. Color strategy: **Restrained** (warm-tinted neutrals + one accent).
 
 ## Color (OKLCH)
 
-Surfaces are intentionally chroma-0 neutral — the mood lives in the brand color and the
-waveform, never in the background (avoids the "warmth in both" AI tell).
+Surfaces carry a whisper of warmth (C ≈ 0.005–0.016 toward hue ~84–96, the
+paper band) — the calm comes from the material, the energy from the brand
+color and the waveform.
 
 ```
---bg:          oklch(0.145 0 0)      /* app background, near-black neutral */
---surface:     oklch(0.185 0 0)      /* panels, history list */
---surface-2:   oklch(0.225 0 0)      /* elevated: hover rows, menus */
---border:      oklch(1 0 0 / 0.09)   /* hairline dividers */
---border-strong: oklch(1 0 0 / 0.16)
+DARK (default)
+--bg:          oklch(0.205 0.006 84)   /* soft warm near-black — a room, not a void */
+--surface:     oklch(0.24 0.007 84)
+--surface-2:   oklch(0.285 0.009 84)
+--ink:         oklch(0.955 0.005 84)
+--ink-2:       oklch(0.79 0.009 84)
+--muted:       oklch(0.66 0.011 84)    /* ≥4.5:1 on --bg */
 
---ink:         oklch(0.98 0 0)       /* primary text */
---ink-2:       oklch(0.76 0 0)       /* secondary text */
---muted:       oklch(0.64 0 0)       /* tertiary labels (≥4.5:1 on --bg) */
+LIGHT (true warm paper)
+--bg:          oklch(0.953 0.013 96)
+--surface:     oklch(0.985 0.006 96)
+--surface-2:   oklch(0.922 0.016 96)
+--ink:         oklch(0.28 0.009 84)
 
---primary:     oklch(0.62 0.18 262)  /* brand indigo — record control, selection, focus */
---primary-hi:  oklch(0.70 0.17 264)  /* hover / lift */
---primary-soft: oklch(0.62 0.18 262 / 0.14) /* tints, focus rings */
---accent:      oklch(0.74 0.15 264)  /* brighter periwinkle for small highlights */
-
---live:        oklch(0.66 0.20 22)   /* RECORDING STATE ONLY — coral/red, never decoration */
---live-soft:   oklch(0.66 0.20 22 / 0.16)
---success:     oklch(0.74 0.15 155)
---danger:      oklch(0.64 0.21 25)
+BOTH
+--primary:     oklch(0.62 0.17 264)  /* brand indigo — record control, selection, focus */
+--live:        oklch(0.66 0.20 22)   /* RECORDING STATE ONLY — coral, never decoration */
+--success / --danger as in styles.css
 ```
 
 ### Speaker hues (diarized transcripts)
@@ -44,27 +46,37 @@ Contrast: --ink and --ink-2 clear 4.5:1 on --bg and --surface; --muted is the fl
 
 ## Typography
 
-One family — the macOS system stack (SF Pro). Durations/timestamps use the mono stack with
-tabular figures. Fixed rem scale, ratio ≈ 1.2.
+Two voices on a contrast axis:
+
+- **UI voice** — the macOS system sans (SF Pro): labels, buttons, entries,
+  settings, chips, all controls.
+- **Reading voice** — the macOS system serif (`ui-serif` / New York): the
+  wordmark (italic), "Press to record", day group headers (italic), recording
+  titles, sheet titles, empty-state titles, and transcript prose. Serif never
+  appears on buttons, labels, or data.
+
+Durations/timestamps use the mono stack with tabular figures.
 
 ```
---font-sans: -apple-system, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
---font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+--font-sans:  -apple-system, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
+--font-serif: ui-serif, "New York", Georgia, "Times New Roman", serif;
+--font-mono:  ui-monospace, "SF Mono", Menlo, monospace;
 
---text-xs: 0.75rem;   /* meta labels */
---text-sm: 0.8125rem; /* secondary */
+--text-xs: 0.75rem;    /* meta labels */
+--text-sm: 0.8125rem;  /* secondary */
 --text-base: 0.9375rem;
---text-lg: 1.0625rem;
---text-xl: 1.375rem;  /* section title */
---text-2xl: 1.75rem;  /* timer while recording */
+--text-lg: 1.0625rem;  /* transcript prose (serif) */
+--text-xl: 1.375rem;   /* hero hint (serif) */
+--text-2xl: 1.75rem;   /* timer while recording */
 ```
 
 Numerals: `font-variant-numeric: tabular-nums` on all durations and the live timer.
 
 ## Spacing & Radius
 
-8px base rhythm (4/8/12/16/20/24/32/40). Radii: `--r-sm: 8px`, `--r-md: 12px`,
-`--r-lg: 16px`, `--r-pill: 999px`. Record control is a perfect circle.
+8px base rhythm (4/8/12/16/20/24/32/40). Radii: `--r-sm: 9px`, `--r-md: 14px`,
+`--r-lg: 20px`, `--r-pill: 999px` — generous and soft. Record control is a
+perfect circle.
 
 ## Motion
 

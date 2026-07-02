@@ -68,6 +68,9 @@ contextBridge.exposeInMainWorld('api', {
   // clipboard (main-process — reliable regardless of window focus)
   copyText: (text) => ipcRenderer.invoke('app:copyText', text),
 
+  // auto-update
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+
   // events from main → renderer
   onRecordingUpdated: (cb) => {
     const handler = (_e, record) => cb(record);
@@ -108,5 +111,10 @@ contextBridge.exposeInMainWorld('api', {
     const handler = (_e, data) => cb(data);
     ipcRenderer.on('share:progress', handler);
     return () => ipcRenderer.removeListener('share:progress', handler);
+  },
+  onUpdateReady: (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on('update:ready', handler);
+    return () => ipcRenderer.removeListener('update:ready', handler);
   },
 });

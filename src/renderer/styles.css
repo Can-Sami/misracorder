@@ -225,6 +225,56 @@ button {
   transform: scale(0.94);
 }
 
+/* Update pill — hidden until a new version has downloaded, then eases into the
+   titlebar just left of Settings. Indigo carries it; the text stays ink for
+   contrast in both themes. */
+.update-pill {
+  -webkit-app-region: no-drag;
+  position: absolute;
+  right: 54px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px 0 9px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 550;
+  color: var(--ink-2);
+  background: var(--primary-soft);
+  border: 1px solid var(--primary-soft);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease),
+    color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.update-pill.show {
+  opacity: 1;
+  transform: none;
+}
+.update-pill:hover {
+  color: var(--ink);
+  border-color: var(--border-strong);
+}
+.update-pill:active {
+  transform: scale(0.97);
+}
+.update-pill svg {
+  color: var(--primary);
+  flex: 0 0 auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .update-pill {
+    transition: opacity var(--dur) var(--ease);
+    transform: none;
+  }
+  .update-pill.show {
+    transform: none;
+  }
+}
+
 /* ------------------------------------------------------------------- stage */
 .stage {
   flex: 1 1 auto;

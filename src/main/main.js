@@ -22,6 +22,7 @@ const storage = require('./storage');
 const gemini = require('./gemini');
 const wavUtil = require('./wav');
 const cloud = require('./supabase');
+const updater = require('./updater');
 
 let lastActiveApp = null; // app the user was in when they hit the global shortcut
 
@@ -663,6 +664,10 @@ app.whenReady().then(async () => {
   app.on('browser-window-focus', () => cloud.pollSoon());
   require('electron').powerMonitor.on('resume', () => cloud.pollSoon());
 
+  // Auto-update: check GitHub Releases in the background and offer a quiet
+  // "restart to update" once a new version has downloaded. No-op in dev.
+  updater.init({ send });
+
   // Recover audio routing if a previous run was force-quit while recording system
   // audio: restore the saved output device and remove any leftover Multi-Output Device.
   runHelper(['cleanup', config.getPendingOutputRestore() || ''])
@@ -704,6 +709,11 @@ app.on('will-quit', () => {
 
 // Expose the toggle shortcut label to the renderer via a simple getter.
 ipcMain.handle('app:shortcut', () => config.getShortcut());
+
+// Restart into the freshly downloaded update (from the update banner).
+ipcMain.handle('update:install', () => {
+  updater.quitAndInstall();
+});
 
 // Clipboard writes run in the main process: the renderer's async clipboard
 // rejects when the window loses focus mid-action, this never does.

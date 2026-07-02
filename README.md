@@ -17,6 +17,8 @@ organized by date. Native-feeling, calm, and fast.
 - Filter by date, rename recordings, copy/export transcripts.
 - Auto-uses your **headphone mic** when connected, falls back to the built-in mic.
 - Optionally records your Mac's **system audio** alongside the mic — great for calls.
+- **Updates itself** — new versions download in the background; a *Restart to update*
+  pill appears in the title bar when one's ready.
 - Recordings + transcripts live in `~/Documents/Misracorder/YYYY/MM/DD/`.
 
 ## What's new in 2.0
@@ -49,11 +51,19 @@ organized by date. Native-feeling, calm, and fast.
   with the app's name (or "System Sound").
 - **Semantic search** toggle (embeddings + cosine similarity).
 
-## Updating to a new version
-Just open the new `.dmg`, drag **Misracorder** into **Applications**, and replace the
-old one. Your recordings, transcripts, and API key are kept (they live in
-`~/Documents/Misracorder` and your user data, not inside the app). Re-run the
-`xattr -cr` step below after replacing.
+## Updating
+**Misracorder updates itself.** When a new version is published, it downloads
+quietly in the background and a small **Restart to update** pill appears in the
+title bar — click it whenever you like and the app relaunches on the new version
+(or it just applies the next time you quit). No re-downloading DMGs, no
+`xattr` dance after the first install. Your recordings, transcripts, and API key
+are always kept — they live in `~/Documents/Misracorder` and your user data, not
+inside the app.
+
+> The very first install (below) still needs the one-time `xattr -cr` step,
+> because the initial `.dmg` isn't notarized by Apple. Every automatic update
+> after that is seamless — the app is signed with a stable identity, so macOS
+> lets it replace itself in place without prompting.
 
 ---
 
@@ -192,14 +202,46 @@ For local sharing development: `npx supabase start` boots a full local stack
 
 ```bash
 npm run icon       # regenerate the app icon (build/icon.png) from build/icon.html
-npm run dist       # build dist/Misracorder-<version>-universal.dmg
+npm run dist       # build a signed dist/Misracorder-<version>-universal.dmg (+ .zip)
 ```
 
+Builds are **code-signed** with a local self-signed identity ("Misracorder
+Signing"). This is what makes auto-update work and stops macOS re-asking for the
+microphone on every new build. One-time setup on this Mac:
+
+```bash
+# Trust the bundled signing cert for code signing (approve the keychain prompt):
+security add-trusted-cert -r trustRoot -p codeSign \
+  -k ~/Library/Keychains/login.keychain-db build/misra-signing.crt
+# Verify it's usable — should list "Misracorder Signing":
+security find-identity -v -p codesigning
+```
+
+## Publishing a new version (auto-update)
+
+Auto-update is wired to **GitHub Releases** on the public
+[`Can-Sami/misracorder`](https://github.com/Can-Sami/misracorder) repo. To ship an
+update everyone gets automatically:
+
+```bash
+# 1. bump the version
+npm version patch          # or: minor / major  (edits package.json, tags the commit)
+# 2. build, sign, and publish the release in one step
+npm run release            # electron-builder --mac -p always, GH_TOKEN from `gh auth token`
+```
+
+`npm run release` builds the universal `.dmg` + `.zip`, generates `latest-mac.yml`,
+and uploads them to a new GitHub release. Running copies of Misracorder poll that
+repo, download the update in the background, and show the **Restart to update**
+pill. That's the whole loop — you never hand out a DMG again after the first one.
+
+> **First install only:** friends still need the initial `.dmg` (see *Install*
+> above) with the one-time `xattr -cr`. Every release after that updates itself.
+
 ### Fully frictionless distribution (optional)
-To ship with **zero** Gatekeeper warnings, sign + notarize with an Apple Developer ID
-($99/yr Apple Developer account). Set `mac.identity` to your "Developer ID Application"
-cert in `package.json` and add an electron-builder `afterSign` notarize step. Without
-that, the one-time `xattr -cr` above is the simplest path.
+To drop the first-install `xattr -cr` too, sign + notarize with an Apple Developer
+ID ($99/yr). Swap `mac.identity` for your "Developer ID Application" cert and add an
+electron-builder `afterSign` notarize step. Auto-update keeps working either way.
 
 ## Privacy
 Your Gemini API key is encrypted at rest on your Mac (Electron `safeStorage`), and so

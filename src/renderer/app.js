@@ -1909,6 +1909,17 @@ function wireEvents() {
   api.onShareProgress(({ id, phase }) => {
     if (state.shareFor === id) $('shareProgress').textContent = SHARE_PHASES[phase] || '';
   });
+
+  // Auto-update: once a new version has downloaded, reveal the titlebar pill.
+  // Clicking it quits and relaunches into the update.
+  const updatePill = $('updatePill');
+  updatePill.addEventListener('click', () => api.installUpdate());
+  api.onUpdateReady(({ version } = {}) => {
+    if (version) updatePill.title = `Version ${version} is ready — restart to update`;
+    updatePill.hidden = false;
+    requestAnimationFrame(() => updatePill.classList.add('show'));
+    toast('A new version is ready — restart when you like.');
+  });
 }
 
 // ---------------------------------------------------------------- init

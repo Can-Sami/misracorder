@@ -884,6 +884,7 @@ async function applyShare() {
   }
   for (const rid of toRemove) result = await api.shareRevokeUser(id, rid);
   if (!wantLink && info.link) result = await api.shareRevokeLink(id);
+  if (state.shareFor !== id) return; // sheet moved to another recording mid-flight
   $('shareProgress').textContent = '';
 
   if (!result.ok) {
@@ -920,7 +921,7 @@ async function removeFromCloud() {
   state.records = await api.listRecordings();
   renderHistory();
   toast('Removed from cloud.');
-  closeShareSheet();
+  if (state.shareFor === id) closeShareSheet(); // don't close a sheet opened for another recording
 }
 
 function closeShareSheet() {

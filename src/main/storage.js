@@ -315,6 +315,18 @@ async function deleteEmbedding(id) {
   await fsp.rename(tmp, embeddingsPath());
 }
 
+// Persist the transcribing state at (re-)start so concurrent read-modify-write
+// updates (e.g. a title rename mid-run) see the true status instead of
+// reverting it, and so an interrupted run resumes on next launch.
+async function setTranscribing(id) {
+  const record = await getRecord(id);
+  if (!record) throw new Error(`No recording ${id}`);
+  const updated = { ...record, status: 'transcribing', error: null };
+  await writeSidecarFor(updated);
+  await upsertRecord(updated);
+  return updated;
+}
+
 async function setError(id, message) {
   const record = await getRecord(id);
   if (!record) throw new Error(`No recording ${id}`);
@@ -393,6 +405,7 @@ module.exports = {
   loadEmbeddings,
   setEmbedding,
   deleteEmbedding,
+  setTranscribing,
   setError,
   readTranscript,
   deleteRecording,

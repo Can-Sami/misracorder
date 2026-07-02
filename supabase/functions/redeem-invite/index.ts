@@ -120,16 +120,20 @@ Deno.serve(async (req) => {
     return json(conflict ? 409 : 500, { error: conflict ? 'name-taken' : 'profile-failed' });
   }
 
-  // Mark redeemed LAST so any earlier failure leaves the code usable.
-  const { error: redeemErr } = await admin
+  // Mark redeemed LAST so any earlier failure leaves the code usable. The
+  // `is null` predicate + returned-row check makes the claim atomic: if a
+  // concurrent redemption of the same code won the race, this matches zero
+  // rows and we roll our identity back instead of minting a second account.
+  const { data: claimed, error: redeemErr } = await admin
     .from('invite_codes')
     .update({ redeemed_by: userId, redeemed_at: new Date().toISOString() })
     .eq('id', invite.id)
-    .is('redeemed_by', null);
-  if (redeemErr) {
+    .is('redeemed_by', null)
+    .select('id');
+  if (redeemErr || !claimed?.length) {
     await admin.from('profiles').delete().eq('id', userId);
     await admin.auth.admin.deleteUser(userId);
-    return json(500, { error: 'redeem-failed' });
+    return json(redeemErr ? 500 : 409, { error: redeemErr ? 'redeem-failed' : 'code-already-used' });
   }
 
   try {

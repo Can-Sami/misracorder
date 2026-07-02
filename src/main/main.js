@@ -583,9 +583,10 @@ function wireIpc() {
   ipcMain.handle('recording:retry', async (_e, id) => {
     const record = await storage.getRecord(id);
     if (!record) return null;
-    const reset = { ...record, status: 'transcribing', error: null };
+    if (inFlight.has(id)) return record; // a run is already active — don't double-fire
+    const reset = await storage.setTranscribing(id);
     send('recording:updated', reset);
-    runTranscription(record);
+    runTranscription(reset);
     return reset;
   });
 }

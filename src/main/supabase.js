@@ -45,6 +45,7 @@ let focusApp = () => {}; // bring the window forward (notification clicks)
 let session = null; // { accessToken, refreshToken, expiresAt (epoch sec), userId, displayName }
 let refreshPromise = null;
 let pollTimer = null;
+let pollGen = 0; // bumped on sign-out so an in-flight poll can't resurrect state
 let profilesCache = { at: 0, list: [] };
 let lastInbox = { items: [], unread: 0 };
 
@@ -66,6 +67,7 @@ function status() {
 
 async function signOut() {
   session = null;
+  pollGen++;
   stopPolling();
   lastInbox = { items: [], unread: 0 };
   app.setBadgeCount(0);
@@ -455,8 +457,10 @@ async function fetchInbox() {
 
 async function poll() {
   if (!session) return;
+  const gen = pollGen;
   try {
     const items = await fetchInbox();
+    if (gen !== pollGen || !session) return; // signed out while this poll was in flight
     const unread = items.filter((i) => !i.seen).length;
 
     // Notify once per share, across restarts: anything newer than the high-water mark.

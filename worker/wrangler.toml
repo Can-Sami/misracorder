@@ -2,6 +2,7 @@ name = "misracorder-share"
 main = "share-worker.js"
 compatibility_date = "2026-06-01"
 
-# Secrets (set once):
-#   wrangler secret put SUPABASE_URL          # https://<project>.supabase.co
-#   wrangler secret put SUPABASE_SERVICE_KEY  # service_role key
+# No secrets: all privileged work happens in the share-data Supabase Edge
+# Function. The Worker only needs to know where the project lives.
+[vars]
+SUPABASE_URL = "https://nclwfgyxlocxtylozdte.supabase.co"

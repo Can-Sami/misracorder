@@ -26,9 +26,12 @@ const execFileP = promisify(execFile);
 
 // --- deployment constants ---------------------------------------------------
 // Baked in at ship time (see README "Sharing setup"); env vars override for dev.
-const SUPABASE_URL = process.env.MISRA_SUPABASE_URL || 'https://YOUR-PROJECT.supabase.co';
-const ANON_KEY = process.env.MISRA_SUPABASE_ANON_KEY || 'YOUR-ANON-KEY';
-const WORKER_BASE = process.env.MISRA_SHARE_WORKER || 'https://YOUR-WORKER.workers.dev';
+// The anon key is public by design — every row/object access is gated by RLS.
+const SUPABASE_URL = process.env.MISRA_SUPABASE_URL || 'https://nclwfgyxlocxtylozdte.supabase.co';
+const ANON_KEY =
+  process.env.MISRA_SUPABASE_ANON_KEY ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jbHdmZ3l4bG9jeHR5bG96ZHRlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5NzI5MTcsImV4cCI6MjA5ODU0ODkxN30.CV-jaoQofAgYJ12kY9Z4qwEco-Z24mbk2vWC3bbfL4w';
+const WORKER_BASE = process.env.MISRA_SHARE_WORKER || 'https://misracorder-share.can-c5b.workers.dev';
 
 const WAV_FALLBACK_MAX = 45 * 1024 * 1024; // storage free-tier object cap is 50MB
 const POLL_MS = 60_000;

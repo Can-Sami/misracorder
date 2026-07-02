@@ -144,6 +144,45 @@ npm start          # run the app
 npm run dev        # run with DevTools
 ```
 
+## Sharing backend (already deployed)
+
+Sharing runs on a dedicated Supabase project (`nclwfgyxlocxtylozdte`) plus a
+Cloudflare Worker, and is **already live** — the URLs and the public anon key
+are baked into `src/main/supabase.js` (env `MISRA_SUPABASE_URL` /
+`MISRA_SUPABASE_ANON_KEY` / `MISRA_SHARE_WORKER` override them for local dev
+against `npx supabase start`).
+
+Architecture: the app talks straight to PostgREST/Storage under RLS with the
+user's JWT. Two Edge Functions hold the only privileged access:
+`redeem-invite` (exchanges an invite code for an identity) and `share-data`
+(resolves a public link slug → metadata + a 1-hour signed audio URL). The
+Worker at <https://misracorder-share.can-c5b.workers.dev> just renders the
+share page from `share-data` — it holds **no secrets** at all.
+
+Day-2 operations (SQL editor, or `mcp__misracorder__execute_sql`):
+
+```sql
+-- more invite codes
+insert into invite_codes (code, note)
+select 'MISRA-' || upper(substr(md5(random()::text), 1, 4)) || '-' ||
+       upper(substr(md5(random()::text), 1, 4)), 'for <name>'
+from generate_series(1, 5) returning code;
+
+-- see who redeemed what
+select code, note, redeemed_at from invite_codes order by created_at;
+
+-- let a friend who reinstalled reconnect with their same code
+update invite_codes set allow_rebind = true where note = 'for <name>';
+
+-- evict a user entirely (cascades their recordings/shares; audio objects
+-- need a sweep in Storage afterwards)
+delete from auth.users where id = (select id from profiles where display_name = '<name>');
+```
+
+Schema changes go through `supabase/migrations/`; the Worker redeploys with
+`cd worker && npx wrangler deploy`; Edge Functions via the Supabase MCP or
+`npx supabase functions deploy <name> --no-verify-jwt`.
+
 For local sharing development: `npx supabase start` boots a full local stack
 (Docker), then run the app with the `MISRA_*` env vars pointing at it.
 

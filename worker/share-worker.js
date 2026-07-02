@@ -3,11 +3,12 @@
 //   GET /s/:slug  → player + transcript page (404 unknown, 410 revoked)
 //   GET /a/:slug  → re-check revocation, then 302 to a 1h signed audio URL
 //
-// Secrets (wrangler secret put …): SUPABASE_URL, SUPABASE_SERVICE_KEY.
-// The service key never leaves the Worker; it only resolves link slugs and
-// signs storage URLs. Revocation bites on every audio fetch: the <audio> src
-// always points at /a/:slug, so a revoked link stops playing as soon as the
-// browser's buffer runs out.
+// The Worker holds NO secrets: all privileged work (slug lookup + URL signing)
+// happens in the `share-data` Supabase Edge Function, where the unguessable
+// slug itself is the credential. Configuration is one plain var, SUPABASE_URL
+// (wrangler.toml [vars]). Revocation bites on every audio fetch: the <audio>
+// src always points at /a/:slug, so a revoked link stops playing as soon as
+// the browser's buffer runs out.
 
 const HUES = [210, 160, 305, 95, 340, 250];
 const USER_HUE = 264;
@@ -25,37 +26,37 @@ export default {
   },
 };
 
-async function lookupSlug(slug, env, columns) {
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/link_shares?slug=eq.${encodeURIComponent(slug)}&select=${encodeURIComponent(columns)}&limit=1`,
-    { headers: { apikey: env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}` } }
-  );
-  if (!res.ok) throw new Error(`postgrest ${res.status}`);
-  const rows = await res.json();
-  return rows[0] || null;
+// Resolve a slug via the share-data Edge Function (service role stays there).
+async function fetchShareData(slug, env) {
+  const res = await fetch(`${env.SUPABASE_URL}/functions/v1/share-data?slug=${encodeURIComponent(slug)}`);
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    /* non-JSON error body */
+  }
+  return { httpStatus: res.status, data };
 }
 
 async function sharePage(slug, env) {
-  let row;
-  try {
-    row = await lookupSlug(
-      slug,
-      env,
-      'revoked_at,recording:recordings(title,duration_sec,created_at_local,transcript,owner:profiles(display_name))'
-    );
-  } catch {
-    return page(502, 'Temporarily unavailable', 'Try again in a moment.');
+  const { data } = await fetchShareData(slug, env);
+  const status = data?.status;
+  if (status === 'revoked') {
+    return page(410, 'No longer available', 'This shared recording has been taken back by its owner.');
   }
-  if (!row || !row.recording) return page(404, 'Not found', 'This link doesn’t point to a recording.');
-  if (row.revoked_at) return page(410, 'No longer available', 'This shared recording has been taken back by its owner.');
+  if (status !== 'ok' || !data.recording) {
+    return status === 'missing'
+      ? page(404, 'Not found', 'This link doesn’t point to a recording.')
+      : page(502, 'Temporarily unavailable', 'Try again in a moment.');
+  }
 
-  const rec = row.recording;
+  const rec = data.recording;
   const title = esc(rec.title || 'Untitled recording');
-  const owner = esc(rec.owner?.display_name || 'Someone');
-  const when = rec.created_at_local
-    ? new Date(rec.created_at_local).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  const owner = esc(data.owner || 'Someone');
+  const when = rec.recordedAt
+    ? new Date(rec.recordedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
     : '';
-  const dur = fmtDuration(rec.duration_sec);
+  const dur = fmtDuration(rec.durationSec);
   const meta = [owner, when, dur].filter(Boolean).join(' · ');
 
   const body = `
@@ -75,29 +76,16 @@ async function sharePage(slug, env) {
 }
 
 async function audioRedirect(slug, env) {
-  let row;
-  try {
-    row = await lookupSlug(slug, env, 'revoked_at,recording:recordings(audio_path)');
-  } catch {
-    return new Response('temporarily unavailable', { status: 502 });
+  const { data } = await fetchShareData(slug, env);
+  if (data?.status === 'revoked') return new Response('gone', { status: 410 });
+  if (data?.status !== 'ok' || !data.signedUrl) {
+    return data?.status === 'missing'
+      ? new Response('not found', { status: 404 })
+      : new Response('audio unavailable', { status: 502 });
   }
-  if (!row || !row.recording) return new Response('not found', { status: 404 });
-  if (row.revoked_at) return new Response('gone', { status: 410 });
-
-  const res = await fetch(`${env.SUPABASE_URL}/storage/v1/object/sign/audio/${row.recording.audio_path}`, {
-    method: 'POST',
-    headers: {
-      apikey: env.SUPABASE_SERVICE_KEY,
-      Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ expiresIn: 3600 }),
-  });
-  if (!res.ok) return new Response('audio unavailable', { status: 502 });
-  const { signedURL } = await res.json();
   return new Response(null, {
     status: 302,
-    headers: { Location: `${env.SUPABASE_URL}/storage/v1${signedURL}`, 'Cache-Control': 'no-store' },
+    headers: { Location: data.signedUrl, 'Cache-Control': 'no-store' },
   });
 }
 

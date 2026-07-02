@@ -30,6 +30,13 @@
   --success: oklch(0.76 0.14 158);
   --danger: oklch(0.64 0.21 25);
 
+  /* speaker chips (diarized transcripts) — L/C pairs completed by a per-speaker
+     hue (--sp-h) set inline on each turn */
+  --sp-text: 0.8 0.1;
+  --sp-fill: 0.65 0.13;
+  --sp-fill-a: 0.14;
+  --sp-fill-a-hover: 0.24;
+
   --shadow-pop: 0 16px 48px -12px oklch(0 0 0 / 0.6);
 
   --font-sans: -apple-system, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
@@ -77,6 +84,11 @@
     --success: oklch(0.55 0.15 158);
     --danger: oklch(0.55 0.22 25);
 
+    --sp-text: 0.42 0.15;
+    --sp-fill: 0.52 0.15;
+    --sp-fill-a: 0.1;
+    --sp-fill-a-hover: 0.17;
+
     --shadow-pop: 0 16px 44px -14px oklch(0.3 0.02 70 / 0.28);
   }
 }
@@ -104,6 +116,11 @@
 
   --success: oklch(0.55 0.15 158);
   --danger: oklch(0.55 0.22 25);
+
+  --sp-text: 0.42 0.15;
+  --sp-fill: 0.52 0.15;
+  --sp-fill-a: 0.1;
+  --sp-fill-a-hover: 0.17;
 
   --shadow-pop: 0 16px 44px -14px oklch(0.3 0.02 70 / 0.28);
 }
@@ -966,6 +983,58 @@ button {
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
+}
+
+/* diarized transcript: one block per speaker turn, chip above the words */
+.turns {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  white-space: normal;
+}
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.speaker-chip {
+  align-self: flex-start;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.71875rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.6;
+  color: oklch(var(--sp-text) var(--sp-h, 210));
+  background: oklch(var(--sp-fill) var(--sp-h, 210) / var(--sp-fill-a));
+  transition: background 120ms var(--ease);
+}
+button.speaker-chip {
+  cursor: pointer;
+}
+button.speaker-chip:hover {
+  background: oklch(var(--sp-fill) var(--sp-h, 210) / var(--sp-fill-a-hover));
+}
+.turn-text {
+  color: var(--ink);
+}
+
+/* speaker rename popover — opens from inside the detail sheet, so it must sit
+   above the sheet layer (plain popovers live below sheets, and the base
+   .popover rule is declared later, hence the compound selector) */
+.popover.speaker-menu {
+  z-index: calc(var(--z-sheet) + 5);
+  padding: 10px;
+  width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.speaker-menu-hint {
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
 }
 .sheet-actions {
   flex: 0 0 auto;

@@ -241,6 +241,11 @@
       <div class="popover device-menu" id="deviceMenu" role="listbox" hidden></div>
       <!-- Row "more" popover -->
       <div class="popover row-menu" id="rowMenu" hidden></div>
+      <!-- Speaker rename popover -->
+      <div class="popover speaker-menu" id="speakerMenu" hidden>
+        <input type="text" id="speakerNameInput" maxlength="60" spellcheck="false" autocomplete="off" aria-label="Speaker name" />
+        <p class="speaker-menu-hint">Renames every line by this voice.</p>
+      </div>
 
       <!-- Shared audio element (inline play + detail player) -->
       <audio id="audio" preload="metadata"></audio>

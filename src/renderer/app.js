@@ -28,6 +28,7 @@ const state = {
   embeddings: null, // { id: vector } cache
   semanticOrder: null, // [{ id, score }] for the current semantic query
   progress: {}, // id -> { done, total } chunk progress while (re-)transcribing
+  segments: {}, // id -> segments data (or null once fetched and absent)
 };
 
 let recorder = null;
@@ -552,6 +553,7 @@ async function deleteRecording(id) {
     audio.removeAttribute('src');
     state.audioId = null;
   }
+  delete state.segments[id];
   state.records = state.records.filter((r) => r.id !== id);
   if (state.selectedId === id) closeDetail();
   renderHistory();
@@ -627,8 +629,162 @@ function renderDetail(rec) {
     if (rl) rl.onclick = () => api.retryTranscription(rec.id);
   } else {
     const t = (rec.transcript || '').trim();
-    bodyEl.textContent = t || 'No speech detected in this recording.';
-    if (!t) bodyEl.classList.add('placeholder');
+    if (!t) {
+      bodyEl.textContent = 'No speech detected in this recording.';
+      bodyEl.classList.add('placeholder');
+      return;
+    }
+    const turns = turnsHtml(rec);
+    if (turns) bodyEl.innerHTML = turns;
+    else bodyEl.textContent = t;
+  }
+}
+
+// --- diarized transcript rendering -----------------------------------------
+//
+// Recordings transcribed by the diarization pipeline have a segments sidecar
+// (roster of speakers + per-utterance segments). Those render as turn blocks
+// with a colored speaker chip; older recordings keep the plain-text view,
+// except legacy stereo calls whose two channel labels are upgraded visually.
+
+// Speaker hue assignment: "you" always gets the brand hue; everyone else draws
+// from a curated wheel that stays clear of the coral reserved for recording.
+const USER_HUE = 264;
+const SPEAKER_HUES = [210, 160, 305, 95, 340, 250];
+
+function speakerHues(speakers) {
+  const hues = new Map();
+  let i = 0;
+  for (const s of speakers) hues.set(s.id, s.isUser ? USER_HUE : SPEAKER_HUES[i++ % SPEAKER_HUES.length]);
+  return hues;
+}
+
+// Fetch a recording's segments once, upgrade the open detail view on arrival.
+function ensureSegments(id) {
+  if (id in state.segments) return state.segments[id];
+  state.segments[id] = null;
+  api
+    .getSegments(id)
+    .then((data) => {
+      if (!data) return;
+      state.segments[id] = data;
+      if (state.selectedId === id) renderDetail(recordById(id));
+    })
+    .catch(() => {});
+  return null;
+}
+
+function turnsHtml(rec) {
+  const data = ensureSegments(rec.id);
+  if (data) return segmentsTurnsHtml(data);
+  return legacyTurnsHtml(rec);
+}
+
+// Consecutive segments by the same speaker merge into one calm turn block.
+function segmentsTurnsHtml(data) {
+  const hues = speakerHues(data.speakers);
+  const labels = new Map(data.speakers.map((s) => [s.id, s.label]));
+  const turns = [];
+  for (const seg of data.segments) {
+    const last = turns[turns.length - 1];
+    if (last && last.speaker === seg.speaker) last.texts.push(seg.text);
+    else turns.push({ speaker: seg.speaker, texts: [seg.text] });
+  }
+  if (!turns.length) return '';
+  return (
+    `<div class="turns">` +
+    turns
+      .map(
+        (t) => `
+      <div class="turn" style="--sp-h: ${hues.get(t.speaker) || 210}">
+        <button class="speaker-chip" data-speaker="${escapeHtml(t.speaker)}" title="Rename this speaker">${escapeHtml(labels.get(t.speaker) || 'Speaker')}</button>
+        <div class="turn-text">${escapeHtml(t.texts.join(' '))}</div>
+      </div>`
+      )
+      .join('') +
+    `</div>`
+  );
+}
+
+// Legacy stereo calls: no segments file, but every line is "Mic:" or "SysApp:".
+// Render those two known labels as (non-renamable) chips; anything that doesn't
+// match both labels falls back to plain text.
+function legacyTurnsHtml(rec) {
+  if (rec.channels !== 2) return '';
+  const mic = (rec.micName || '').trim();
+  const sys = (rec.sysName || 'System Sound').trim();
+  if (!mic || !sys) return '';
+  const hue = { [mic.toLowerCase()]: USER_HUE, [sys.toLowerCase()]: SPEAKER_HUES[0] };
+  const turns = [];
+  for (const line of (rec.transcript || '').split('\n')) {
+    if (!line.trim()) continue;
+    const m = /^(.{1,40}?):\s+(.*)$/.exec(line);
+    const label = m && hue[m[1].trim().toLowerCase()] !== undefined ? m[1].trim() : null;
+    if (!label) return ''; // an unlabeled line → not a clean two-speaker call
+    const last = turns[turns.length - 1];
+    if (last && last.label === label) last.texts.push(m[2]);
+    else turns.push({ label, texts: [m[2]] });
+  }
+  if (!turns.length) return '';
+  return (
+    `<div class="turns">` +
+    turns
+      .map(
+        (t) => `
+      <div class="turn" style="--sp-h: ${hue[t.label.toLowerCase()]}">
+        <span class="speaker-chip">${escapeHtml(t.label)}</span>
+        <div class="turn-text">${escapeHtml(t.texts.join(' '))}</div>
+      </div>`
+      )
+      .join('') +
+    `</div>`
+  );
+}
+
+// --- speaker rename popover -------------------------------------------------
+
+function openSpeakerMenu(speakerId, anchor) {
+  const id = state.selectedId;
+  const data = id && state.segments[id];
+  if (!data) return;
+  const speaker = data.speakers.find((s) => s.id === speakerId);
+  if (!speaker) return;
+  const menu = $('speakerMenu');
+  menu.dataset.recId = id;
+  menu.dataset.speakerId = speakerId;
+  menu.hidden = false;
+  const input = $('speakerNameInput');
+  input.value = speaker.label;
+  const r = anchor.getBoundingClientRect();
+  const mw = menu.offsetWidth || 240; // matches .popover.speaker-menu width (layout may not have run yet)
+  menu.style.left = Math.max(12, Math.min(r.left, window.innerWidth - mw - 12)) + 'px';
+  menu.style.top = r.bottom + 6 + 'px';
+  input.focus();
+  input.select();
+}
+
+function closeSpeakerMenu() {
+  $('speakerMenu').hidden = true;
+}
+
+async function commitSpeakerRename() {
+  const menu = $('speakerMenu');
+  if (menu.hidden) return;
+  const recId = menu.dataset.recId;
+  const speakerId = menu.dataset.speakerId;
+  const label = $('speakerNameInput').value.trim();
+  closeSpeakerMenu();
+  const data = state.segments[recId];
+  const current = data && data.speakers.find((s) => s.id === speakerId);
+  if (!label || !current || label === current.label) return;
+  try {
+    const updated = await api.renameSpeaker(recId, speakerId, label);
+    delete state.segments[recId]; // re-read the rewritten roster
+    upsertRecord(updated);
+    toast(`Renamed to ${label}.`);
+  } catch (err) {
+    console.error(err);
+    toast('Could not rename the speaker.');
   }
 }
 
@@ -1205,6 +1361,21 @@ function wireEvents() {
     else if (act === 'delete') deleteRecording(id);
   });
 
+  // speaker chips → rename popover (delegated; legacy chips are spans, not buttons)
+  $('transcriptBody').addEventListener('click', (e) => {
+    const chip = e.target.closest('button.speaker-chip');
+    if (!chip) return;
+    e.stopPropagation();
+    openSpeakerMenu(chip.dataset.speaker, chip);
+  });
+  $('speakerMenu').addEventListener('click', (e) => e.stopPropagation());
+  $('speakerNameInput').addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') commitSpeakerRename();
+    else if (e.key === 'Escape') closeSpeakerMenu();
+  });
+  $('speakerNameInput').addEventListener('blur', commitSpeakerRename);
+
   // detail actions
   $('copyBtn').addEventListener('click', () => state.selectedId && copyTranscript(state.selectedId));
   $('exportBtn').addEventListener('click', () => state.selectedId && exportTranscriptFor(state.selectedId));
@@ -1226,6 +1397,7 @@ function wireEvents() {
   document.addEventListener('click', () => {
     closeDeviceMenu();
     closeRowMenu();
+    closeSpeakerMenu();
   });
 
   // keyboard
@@ -1234,6 +1406,7 @@ function wireEvents() {
     if (e.key === 'Escape') {
       if (!$('deviceMenu').hidden) return closeDeviceMenu();
       if (!$('rowMenu').hidden) return closeRowMenu();
+      if (!$('speakerMenu').hidden) return closeSpeakerMenu();
       if ($('settings').classList.contains('open')) return closeSettings();
       if ($('detail').classList.contains('open')) return closeDetail();
     }
@@ -1264,6 +1437,7 @@ function wireEvents() {
   });
   api.onRecordingUpdated((rec) => {
     if (rec.status !== 'transcribing') delete state.progress[rec.id]; // run finished
+    delete state.segments[rec.id]; // transcript changed → segments are stale
     upsertRecord(rec);
     if (rec.status === 'done') state.embeddings = null; // a new embedding may exist now
   });

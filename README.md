@@ -6,12 +6,34 @@ organized by date. Native-feeling, calm, and fast.
 - Press the orb (or **⌥⌘R** from anywhere) to record; press again to stop.
 - A transcript appears next to the saved recording within a couple of seconds, with
   a short **AI-generated title** so it's easy to find.
+- **Who-said-what transcripts.** Every voice gets its own label ("Man 1", "Woman 1"),
+  shown as colored chips — click a chip to rename the speaker everywhere.
+- **Share recordings with friends** who use Misracorder (they get a ping), or with
+  anyone via a web link with a player + transcript. Everything stays local until you
+  hit Share.
 - **Search** by keyword, or flip on **Semantic** search to find recordings by meaning.
 - Filter by date, rename recordings, copy/export transcripts.
 - Auto-uses your **headphone mic** when connected, falls back to the built-in mic.
-- Optionally records your Mac's **system audio** alongside the mic, and **labels who
-  said what** in calls (your name vs. the app, e.g. "Microsoft Teams").
+- Optionally records your Mac's **system audio** alongside the mic — great for calls.
 - Recordings + transcripts live in `~/Documents/Misracorder/YYYY/MM/DD/`.
+
+## What's new in 2.0
+
+- **Real speaker diarization.** Transcripts are structured by voice, not just by
+  channel: several people on a call (or in the room, on one mic) each get their own
+  label — "Man 1", "Woman 1", "Speaker 2" — with a stable identity across long
+  recordings. Your own voice keeps your name (Settings → Your name). Click any
+  speaker chip in a transcript to rename that voice everywhere; search, copy, and
+  export follow the rename. Old recordings upgrade the moment you hit
+  **Re-transcribe**.
+- **Sharing.** Connect once in **Settings → Sharing** with an invite code, then share
+  any recording from its ••• menu: pick friends (it lands in their **Shared with me**
+  tab with a dock-badge ping and a notification) and/or flip on a **public link** —
+  a clean web page with the player and the speaker-labeled transcript. Revoke a
+  share or the link any time; **Remove from cloud** deletes the cloud copy entirely.
+  Nothing is uploaded until you share, and your local files remain the source of
+  truth. Audio uploads as compact AAC (converted on the fly with macOS's built-in
+  encoder).
 
 ## What's new in 1.2
 - **Automatic system-audio recording.** Install BlackHole once and Misracorder does the
@@ -86,6 +108,34 @@ Don't need it? Turn **Settings → Record system audio** off — the app records
 
 ---
 
+## Sharing setup (owner, one time)
+
+Sharing runs on a free Supabase project plus a tiny Cloudflare Worker for the public
+share pages. Friends never see any of this — they just enter an invite code.
+
+1. Create a Supabase project at <https://supabase.com/dashboard>. In
+   **Authentication → Sign In / Up**, disable email signups and anonymous sign-ins.
+2. Apply the schema: paste `supabase/migrations/001_init.sql` into the SQL editor
+   (or `npx supabase link && npx supabase db push`).
+3. Deploy the invite function:
+   ```bash
+   npx supabase functions deploy redeem-invite --no-verify-jwt
+   ```
+4. Deploy the share page Worker:
+   ```bash
+   cd worker
+   npx wrangler secret put SUPABASE_URL          # https://<project>.supabase.co
+   npx wrangler secret put SUPABASE_SERVICE_KEY  # service_role key
+   npx wrangler deploy
+   ```
+5. Bake the deployment into the app: set `SUPABASE_URL`, `ANON_KEY`, and
+   `WORKER_BASE` at the top of `src/main/supabase.js` (or export
+   `MISRA_SUPABASE_URL` / `MISRA_SUPABASE_ANON_KEY` / `MISRA_SHARE_WORKER` in dev),
+   then `npm run dist` and ship the DMG.
+6. Generate invite codes in the SQL editor (snippet at the bottom of
+   `001_init.sql`) and DM one to each friend. If someone reinstalls, flip their
+   code's `allow_rebind` to `true` and they can reconnect with the same code.
+
 ## Develop / run from source
 
 ```bash
@@ -93,6 +143,9 @@ npm install
 npm start          # run the app
 npm run dev        # run with DevTools
 ```
+
+For local sharing development: `npx supabase start` boots a full local stack
+(Docker), then run the app with the `MISRA_*` env vars pointing at it.
 
 ## Build the distributable
 
@@ -108,6 +161,9 @@ cert in `package.json` and add an electron-builder `afterSign` notarize step. Wi
 that, the one-time `xattr -cr` above is the simplest path.
 
 ## Privacy
-Your Gemini API key is encrypted at rest on your Mac (Electron `safeStorage`). Audio is
-sent to Google's Gemini API only to produce the transcript. Recordings never leave your
-Mac otherwise.
+Your Gemini API key is encrypted at rest on your Mac (Electron `safeStorage`), and so
+is your sharing identity. Audio is sent to Google's Gemini API only to produce the
+transcript. Recordings never leave your Mac unless you explicitly share one — a share
+uploads that recording (as AAC) and its transcript to the owner's Supabase project,
+and "Remove from cloud" deletes the copy again. Public links are unguessable and
+revocable; revoked links stop serving audio immediately.

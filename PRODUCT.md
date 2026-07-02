@@ -6,23 +6,28 @@ product
 
 ## Users
 
-A single person on a Mac capturing voice — quick thoughts, meeting notes, a long
-dictated passage. Not a team tool, not an audio editor. The user wants to press one
-thing, talk, and walk away trusting the audio is saved and a transcript will appear,
-filed by date so it can be found later. They use wired or wireless (Bluetooth)
-headphones interchangeably and expect the app to follow whatever mic they're on.
+A single person on a Mac capturing voice — quick thoughts, meeting notes, calls, a
+long dictated passage — inside a small circle of friends who all run the app. Not an
+audio editor, not a workspace product: recording stays personal and local; sharing is
+a deliberate act of handing one recording to a friend (or to anyone via a link). The
+user wants to press one thing, talk, and walk away trusting the audio is saved and a
+transcript will appear, filed by date so it can be found later. They use wired or
+wireless (Bluetooth) headphones interchangeably and expect the app to follow whatever
+mic they're on.
 
 ## Product Purpose
 
-Misracorder does exactly one thing and does it beautifully: **record microphone audio,
-transcribe it with the Gemini API, and keep both the recording and its transcript
-organized by date** (year / month / day). The main screen is a single confident record
-control with a live audio visualization, plus an elegant date-grouped history of past
-recordings; selecting one shows its transcript.
+Misracorder does one core thing beautifully: **record audio, transcribe it with the
+Gemini API with per-voice speaker labels, and keep both organized by date** (year /
+month / day). The main screen is a single confident record control with a live audio
+visualization, plus an elegant date-grouped history; selecting a recording shows its
+transcript as calm speaker turns. Around that core, one social gesture: **share a
+recording** — to a friend's "Shared with me" (with a quiet ping) or as a public web
+page. Everything stays local until the user shares.
 
-**Success** = the user presses record, speaks, and a moment later has a clean transcript
-next to a saved recording — with zero configuration friction beyond pasting a Gemini API
-key once.
+**Success** = the user presses record, speaks, and a moment later has a clean,
+who-said-what transcript next to a saved recording — with zero configuration friction
+beyond pasting a Gemini API key once (and, for sharing, one invite code ever).
 
 ## Brand Personality
 

@@ -27,11 +27,8 @@ create policy "profiles: authenticated read all"
 create policy "profiles: update own"
   on public.profiles for update to authenticated
   using (id = auth.uid()) with check (id = auth.uid());
-
--- Rows are inserted only by the service-role Edge Function; users may edit
--- nothing but their own display name.
-revoke update on public.profiles from authenticated;
-grant  update (display_name) on public.profiles to authenticated;
+-- (Rows are inserted only by the service-role Edge Function; column grants at
+-- the bottom of this file limit users to their own display name.)
 
 -- ============ invite_codes =================================================
 -- Deny-all RLS: only the Edge Function (service role) touches this table.
@@ -76,16 +73,8 @@ create policy "recordings: owner all"
   on public.recordings for all to authenticated
   using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 
--- Recipients read recordings actively shared to them. No RLS recursion: the
--- shares policies below only test auth.uid() columns.
-create policy "recordings: recipient read"
-  on public.recordings for select to authenticated
-  using (exists (
-    select 1 from public.shares s
-    where s.recording_id = recordings.id
-      and s.recipient_id = auth.uid()
-      and s.revoked_at is null
-  ));
+-- (The recipient-read policy references shares, so it is created after that
+-- table, below.)
 
 -- ============ shares (user-to-user) ========================================
 -- owner_id is denormalized from recordings to keep the recordings policy
@@ -117,12 +106,21 @@ create policy "shares: recipient update own rows"
   on public.shares for update to authenticated
   using (recipient_id = auth.uid()) with check (recipient_id = auth.uid());
 
--- Column grant limits BOTH policies' update surface to the two mutable
--- columns: owners revoke (revoked_at), recipients mark read (seen_at). A
+-- (Column grants at the bottom limit BOTH update policies to the two mutable
+-- columns: owners revoke via revoked_at, recipients mark read via seen_at. A
 -- recipient flipping revoked_at on their own row only hides it from
--- themselves — harmless.
-revoke update on public.shares from authenticated;
-grant  update (seen_at, revoked_at) on public.shares to authenticated;
+-- themselves — harmless.)
+
+-- Recipients read recordings actively shared to them. No RLS recursion: the
+-- shares policies above only test auth.uid() columns.
+create policy "recordings: recipient read"
+  on public.recordings for select to authenticated
+  using (exists (
+    select 1 from public.shares s
+    where s.recording_id = recordings.id
+      and s.recipient_id = auth.uid()
+      and s.revoked_at is null
+  ));
 
 -- ============ link_shares (public web links) ===============================
 -- slug is 22 chars of base64url randomness (16 bytes) — unguessable. The
@@ -165,6 +163,27 @@ create policy "audio: recipient read"
       and s.recipient_id = auth.uid()
       and s.revoked_at is null
   ));
+
+-- ============ privileges ===================================================
+-- Deterministic grants regardless of environment defaults: hosted projects
+-- grant broadly to authenticated by default (which would defeat the column
+-- restrictions), while local stacks may grant nothing at all (which would
+-- break even the service role). Revoke everything, then grant the minimum.
+revoke all on public.profiles, public.invite_codes, public.recordings,
+              public.shares, public.link_shares
+  from anon, authenticated;
+
+grant all on public.profiles, public.invite_codes, public.recordings,
+             public.shares, public.link_shares
+  to service_role;
+
+grant select on public.profiles to authenticated;
+grant update (display_name) on public.profiles to authenticated;
+grant select, insert, update, delete on public.recordings to authenticated;
+grant select, insert on public.shares to authenticated;
+grant update (seen_at, revoked_at) on public.shares to authenticated;
+grant select, insert, update on public.link_shares to authenticated;
+-- invite_codes: service role only.
 
 -- ============ invite-code generation (run as needed) =======================
 -- insert into public.invite_codes (code, note)

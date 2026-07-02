@@ -1,7 +1,7 @@
 {
   "name": "misracorder",
   "productName": "Misracorder",
-  "version": "1.4.0",
+  "version": "2.0.0",
   "description": "Record audio on your Mac and transcribe it with Gemini, filed by date.",
   "type": "commonjs",
   "main": "src/main/main.js",

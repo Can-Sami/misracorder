@@ -94,6 +94,17 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// Best-effort clipboard write: throws when the window isn't focused (e.g. the
+// user switched apps mid-action) — that must never abort the calling flow.
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function formatShortcut(accel) {
   const map = { CommandOrControl: '⌘', Command: '⌘', Cmd: '⌘', Control: '⌃', Ctrl: '⌃', Alt: '⌥', Option: '⌥', Shift: '⇧', Super: '⌘', Return: '⏎' };
   return (accel || '')
@@ -704,15 +715,13 @@ async function copyTranscript(id) {
   const rec = recordById(id);
   const text = (rec && rec.transcript) || '';
   if (!text.trim()) return toast('No transcript to copy yet.');
-  await navigator.clipboard.writeText(text);
-  toast('Transcript copied.');
+  if (await copyText(text)) toast('Transcript copied.');
 }
 
 async function copySharedTranscript(item) {
   const text = (item.transcript?.text || '').trim();
   if (!text) return toast('No transcript to copy.');
-  await navigator.clipboard.writeText(text);
-  toast('Transcript copied.');
+  if (await copyText(text)) toast('Transcript copied.');
 }
 
 async function exportTranscriptFor(id) {
@@ -851,8 +860,7 @@ function renderShareSheet() {
   const copyBtn = $('copyLinkBtn');
   if (copyBtn) {
     copyBtn.onclick = async () => {
-      await navigator.clipboard.writeText(info.link.url);
-      toast('Link copied.');
+      if (await copyText(info.link.url)) toast('Link copied.');
     };
   }
 }
@@ -895,8 +903,8 @@ async function applyShare() {
   renderHistory();
   const newLink = !info.link && result.link;
   if (newLink) {
-    await navigator.clipboard.writeText(result.link.url);
-    toast(toAdd.length ? `Shared with ${toAdd.length} · link copied.` : 'Link copied.');
+    const copied = await copyText(result.link.url);
+    toast(toAdd.length ? `Shared with ${toAdd.length}${copied ? ' · link copied' : ''}.` : copied ? 'Link copied.' : 'Link created.');
   } else if (toAdd.length || toRemove.length) {
     toast('Sharing updated.');
   }

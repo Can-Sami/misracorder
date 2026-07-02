@@ -7,3 +7,10 @@ out/
 Recordings/
 recordings.json
 .env
+# supabase local dev
+supabase/.branches/
+supabase/.temp/
+# worker
+worker/node_modules/
+worker/.wrangler/
+worker/.dev.vars

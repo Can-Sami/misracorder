@@ -31,6 +31,14 @@ waveform, never in the background (avoids the "warmth in both" AI tell).
 --danger:      oklch(0.64 0.21 25)
 ```
 
+### Speaker hues (diarized transcripts)
+
+Each speaker chip completes a fixed L/C pair (`--sp-text`, `--sp-fill`, re-tuned per
+theme) with a per-speaker hue. "You" is always the brand hue **264**; other voices
+draw, in roster order, from a curated wheel that stays clear of the reserved coral
+band: **210 · 160 · 305 · 95 · 340 · 250**. Hue is identity, never decoration — the
+same speaker keeps the same hue for the life of a recording.
+
 Contrast: --ink and --ink-2 clear 4.5:1 on --bg and --surface; --muted is the floor at
 ~4.5:1, used only for small non-body labels (dates, durations).
 

@@ -12,6 +12,12 @@ const { app, safeStorage } = require('electron');
 const wav = require('../src/main/wav');
 const gemini = require('../src/main/gemini');
 
+// Launched as `electron scripts/retranscribe.js`, Electron defaults to its own
+// userData dir + Keychain identity — point both at the real app's so the
+// encrypted key can be found and decrypted.
+app.setName('Misracorder');
+app.setPath('userData', path.join(app.getPath('appData'), 'Misracorder'));
+
 function decodeKey() {
   // Mirror config.getApiKey() without pulling the whole config module.
   const cfgPath = path.join(app.getPath('userData'), 'config.json');
@@ -55,16 +61,19 @@ async function main() {
   }
 
   const buffer = await fsp.readFile(wavPath);
-  const chunked = wav.chunkStereo(buffer);
-  if (!chunked) throw new Error('Not a stereo recording — nothing to merge.');
+  const stereo = wav.chunkStereo(buffer);
+  const chunked = stereo || wav.chunkMono(buffer);
+  if (!chunked) throw new Error('Not a 16-bit PCM WAV Misracorder recording.');
+  const mode = stereo ? 'stereo' : 'mono';
   console.error(
-    `[retranscribe] ${Math.round(chunked.durationSec)}s audio → ${chunked.chunks.length} chunks` +
+    `[retranscribe] ${Math.round(chunked.durationSec)}s ${mode} audio → ${chunked.chunks.length} chunks` +
       ` | mic="${micName}" sys="${sysName}" model=${model}`
   );
 
-  const text = await gemini.transcribeConversationChunked({
+  const result = await gemini.diarizeChunked({
     apiKey: key,
     model,
+    mode,
     chunks: chunked.chunks,
     micName,
     sysName,
@@ -72,8 +81,21 @@ async function main() {
   });
 
   const outPath = wavPath.replace(/\.wav$/i, '.txt');
-  await fsp.writeFile(outPath, text + '\n', 'utf8');
-  console.error(`[retranscribe] wrote ${outPath} (${text.length} chars, ${text.split('\n').length} lines)`);
+  await fsp.writeFile(outPath, result.text + '\n', 'utf8');
+  const segPath = wavPath.replace(/\.wav$/i, '.segments.json');
+  await fsp.writeFile(
+    segPath,
+    JSON.stringify(
+      { version: 1, language: result.language, speakers: result.speakers, segments: result.segments },
+      null,
+      2
+    ) + '\n',
+    'utf8'
+  );
+  console.error(
+    `[retranscribe] wrote ${outPath} (${result.text.length} chars) + ${path.basename(segPath)} ` +
+      `(${result.speakers.length} speakers: ${result.speakers.map((s) => s.label).join(', ')})`
+  );
 }
 
 app.whenReady().then(async () => {

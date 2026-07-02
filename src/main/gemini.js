@@ -653,7 +653,7 @@ async function diarizeChunked({ apiKey, model, mode, chunks, micName, sysName, s
       }
       windowSegs.push(seg);
       const m = meta.get(g.speaker.toLowerCase());
-      if (m?.voice && !sp.isUser) sp.voice = m.voice; // refresh the recognition notes
+      if (m?.voice) sp.voice = m.voice; // refresh the recognition notes for later windows
     }
     segments.push(...collapseRepeatSegments(windowSegs));
     if (onProgress) onProgress(i + 1, chunks.length);

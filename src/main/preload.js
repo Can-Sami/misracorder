@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('api', {
   // recordings
   listRecordings: () => ipcRenderer.invoke('recordings:list'),
   getTranscript: (id) => ipcRenderer.invoke('recordings:transcript', id),
+  getSegments: (id) => ipcRenderer.invoke('recordings:segments', id),
+  renameSpeaker: (id, speakerId, label) => ipcRenderer.invoke('recordings:renameSpeaker', id, speakerId, label),
   setTitle: (id, title) => ipcRenderer.invoke('recordings:setTitle', id, title),
   deleteRecording: (id) => ipcRenderer.invoke('recordings:delete', id),
   revealRecording: (id) => ipcRenderer.invoke('recordings:reveal', id),

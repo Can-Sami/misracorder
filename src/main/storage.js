@@ -17,6 +17,7 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 const os = require('os');
+const gemini = require('./gemini'); // flattenSegments — segments → "Label: text" lines
 
 const MANIFEST_NAME = 'recordings.json';
 
@@ -167,6 +168,78 @@ async function setTranscript(id, transcript) {
   return updated;
 }
 
+// --- diarized transcripts ---------------------------------------------------
+//
+// Diarized recordings get a fourth artifact, <base>.segments.json:
+//   { version, language, speakers: [{ id, label, gender, source, voice, isUser }],
+//     segments: [{ speaker: <roster id>, text, start?, end? }] }
+// The flattened "Label: text" transcript is STILL written to the .txt and the
+// manifest, so search, previews, copy and export never need to know about
+// segments. A record with `segmentsPath` set is in the new format.
+
+function segmentsRelFor(record) {
+  return record.audioPath.replace(/\.wav$/, '.segments.json');
+}
+
+async function setTranscriptAndSegments(id, { text, language, speakers, segments }) {
+  const record = await getRecord(id);
+  if (!record) throw new Error(`No recording ${id}`);
+  const flat = (text || '').trim();
+  const segmentsRel = segmentsRelFor(record);
+  await fsp.writeFile(path.join(rootDir, record.transcriptPath), flat + '\n', 'utf8');
+  await fsp.writeFile(
+    path.join(rootDir, segmentsRel),
+    JSON.stringify({ version: 1, language: language || '', speakers, segments }, null, 2),
+    'utf8'
+  );
+  const updated = {
+    ...record,
+    transcript: flat,
+    status: flat ? 'done' : 'empty',
+    error: null,
+    segmentsPath: segmentsRel,
+    speakerCount: speakers.length,
+  };
+  await writeSidecarFor(updated);
+  await upsertRecord(updated);
+  return updated;
+}
+
+async function readSegments(id) {
+  const record = await getRecord(id);
+  if (!record || !record.segmentsPath) return null;
+  try {
+    const data = JSON.parse(await fsp.readFile(path.join(rootDir, record.segmentsPath), 'utf8'));
+    return data && Array.isArray(data.speakers) && Array.isArray(data.segments) ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+// Rename one speaker across a recording: edit the roster label, re-flatten the
+// transcript so the .txt/manifest (and thus search, copy, export) pick up the
+// new name, and drop the stale embedding so semantic search re-indexes.
+async function renameSpeaker(id, speakerId, label) {
+  const record = await getRecord(id);
+  if (!record) throw new Error(`No recording ${id}`);
+  const data = await readSegments(id);
+  if (!data) throw new Error(`Recording ${id} has no speaker data`);
+  const clean = (label || '').trim().slice(0, 60);
+  if (!clean) return record;
+  const speaker = data.speakers.find((s) => s.id === speakerId);
+  if (!speaker) throw new Error(`No speaker ${speakerId} in ${id}`);
+  speaker.label = clean;
+  await fsp.writeFile(path.join(rootDir, record.segmentsPath), JSON.stringify(data, null, 2), 'utf8');
+
+  const flat = gemini.flattenSegments(data.speakers, data.segments);
+  await fsp.writeFile(path.join(rootDir, record.transcriptPath), flat + '\n', 'utf8');
+  await deleteEmbedding(id);
+  const updated = { ...record, transcript: flat };
+  await writeSidecarFor(updated);
+  await upsertRecord(updated);
+  return updated;
+}
+
 // Rename a recording. Marks the title as user-set so transcription won't override it.
 async function setTitle(id, title) {
   const record = await getRecord(id);
@@ -216,6 +289,15 @@ async function setEmbedding(id, vector) {
   await fsp.rename(tmp, embeddingsPath());
 }
 
+async function deleteEmbedding(id) {
+  const all = await loadEmbeddings();
+  if (!(id in all)) return;
+  delete all[id];
+  const tmp = embeddingsPath() + '.tmp';
+  await fsp.writeFile(tmp, JSON.stringify(all), 'utf8');
+  await fsp.rename(tmp, embeddingsPath());
+}
+
 async function setError(id, message) {
   const record = await getRecord(id);
   if (!record) throw new Error(`No recording ${id}`);
@@ -255,7 +337,12 @@ async function readTranscript(id) {
 async function deleteRecording(id) {
   const record = await getRecord(id);
   if (!record) return false;
-  for (const rel of [record.audioPath, record.transcriptPath, record.audioPath.replace(/\.wav$/, '.json')]) {
+  for (const rel of [
+    record.audioPath,
+    record.transcriptPath,
+    record.audioPath.replace(/\.wav$/, '.json'),
+    segmentsRelFor(record),
+  ]) {
     try {
       await fsp.unlink(path.join(rootDir, rel));
     } catch (err) {
@@ -279,10 +366,14 @@ module.exports = {
   loadManifest,
   createRecording,
   setTranscript,
+  setTranscriptAndSegments,
+  readSegments,
+  renameSpeaker,
   setTitle,
   setAutoTitle,
   loadEmbeddings,
   setEmbedding,
+  deleteEmbedding,
   setError,
   readTranscript,
   deleteRecording,

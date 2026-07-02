@@ -256,45 +256,63 @@ async function runTranscription(record) {
   const model = record.model || config.getModel();
   try {
     const filePath = storage.absAudioPath(record);
-    let text;
-    // Stereo recording (L=mic, R=system) → split and let Gemini label speakers.
-    // Long calls are cut into short time windows first: one-shot transcription of
-    // many-minute audio degrades into an unbroken wall of text.
-    if (record.channels === 2) {
-      const buffer = await fsp.readFile(filePath);
-      const micName = record.micName || config.getUserName();
-      const sysName = record.sysName || 'System Sound';
-      const chunked = wavUtil.chunkStereo(buffer);
-      if (chunked && chunked.chunks.length > 1) {
-        text = await gemini.transcribeConversationChunked({
+    const buffer = await fsp.readFile(filePath);
+    const micName = record.micName || config.getUserName();
+    const sysName = record.sysName || 'System Sound';
+    const onProgress = (done, total) => {
+      if (total > 1) send('recording:progress', { id: record.id, done, total });
+    };
+
+    // Diarized pipeline: structured segments with per-voice speaker labels.
+    // Both stereo (L=mic, R=system) and mono recordings go through the same
+    // windowed engine — long audio is cut into short windows first, since
+    // one-shot transcription of many-minute audio degrades into a wall of text.
+    let result = null;
+    try {
+      const chunked = record.channels === 2 ? wavUtil.chunkStereo(buffer) : wavUtil.chunkMono(buffer);
+      if (chunked) {
+        result = await gemini.diarizeChunked({
           apiKey,
           model,
+          mode: record.channels === 2 ? 'stereo' : 'mono',
           chunks: chunked.chunks,
           micName,
           sysName,
           signal: controller.signal,
-          onProgress: (done, total) => send('recording:progress', { id: record.id, done, total }),
+          onProgress,
         });
-      } else {
-        const split = wavUtil.splitStereo(buffer);
-        if (split) {
-          text = await gemini.transcribeConversation({
+      }
+    } catch (err) {
+      if (controller.signal.aborted) throw err;
+      console.warn('[diarize] fell back to the plain text pipeline:', err.message);
+    }
+
+    let updated;
+    if (result) {
+      updated = await storage.setTranscriptAndSegments(record.id, result);
+    } else {
+      // Legacy pipeline — plain text, channel-based labels for stereo.
+      let text;
+      if (record.channels === 2) {
+        const chunked = wavUtil.chunkStereo(buffer);
+        if (chunked) {
+          text = await gemini.transcribeConversationChunked({
             apiKey,
             model,
-            micBuffer: split.left,
-            sysBuffer: split.right,
+            chunks: chunked.chunks,
             micName,
             sysName,
             signal: controller.signal,
+            onProgress,
           });
         }
       }
+      if (text === undefined) {
+        text = await gemini.transcribeFile({ apiKey, model, filePath, signal: controller.signal });
+      }
+      updated = await storage.setTranscript(record.id, text);
     }
-    if (text === undefined) {
-      text = await gemini.transcribeFile({ apiKey, model, filePath, signal: controller.signal });
-    }
-
-    let updated = await storage.setTranscript(record.id, text);
+    const text = updated.transcript;
     send('recording:updated', updated);
 
     // Best-effort summary title + embedding (don't fail the transcript on these).
@@ -476,6 +494,12 @@ function wireIpc() {
   ipcMain.handle('recordings:list', () => storage.loadManifest());
 
   ipcMain.handle('recordings:transcript', (_e, id) => storage.readTranscript(id));
+
+  ipcMain.handle('recordings:segments', (_e, id) => storage.readSegments(id));
+
+  ipcMain.handle('recordings:renameSpeaker', (_e, id, speakerId, label) =>
+    storage.renameSpeaker(id, speakerId, label)
+  );
 
   ipcMain.handle('recordings:setTitle', (_e, id, title) => storage.setTitle(id, title));
 

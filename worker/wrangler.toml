@@ -1,0 +1,7 @@
+name = "misracorder-share"
+main = "share-worker.js"
+compatibility_date = "2026-06-01"
+
+# Secrets (set once):
+#   wrangler secret put SUPABASE_URL          # https://<project>.supabase.co
+#   wrangler secret put SUPABASE_SERVICE_KEY  # service_role key

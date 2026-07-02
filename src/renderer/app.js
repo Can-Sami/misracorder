@@ -1655,6 +1655,76 @@ function clearSearch() {
 }
 
 // ---------------------------------------------------------------- wiring
+// ------------------------------------------------- easter egg (HR / Misra 💼)
+// An inside joke: Misracorder records your calls, and HR is always watching.
+// Summoned three ways — the secret word, a 7× logo tap, or the 💼 pip that only
+// appears when "Your name" reads as HR/Misra.
+const HR_NAME_RE = /\b(hr|misra|human\s*resources)\b/i;
+let hrEggOpen = false;
+
+function updateHrPip() {
+  const pip = $('hrPip');
+  if (pip) pip.hidden = !HR_NAME_RE.test(state.settings.userName || '');
+}
+
+function openHrEgg() {
+  const egg = $('hrEgg');
+  if (!egg || hrEggOpen) return;
+  hrEggOpen = true;
+  egg.hidden = false;
+  requestAnimationFrame(() => egg.classList.add('show'));
+}
+
+function closeHrEgg() {
+  const egg = $('hrEgg');
+  if (!egg || !hrEggOpen) return;
+  hrEggOpen = false;
+  egg.classList.remove('show');
+  setTimeout(() => {
+    if (!hrEggOpen) egg.hidden = true;
+  }, 300);
+}
+
+function wireEasterEgg() {
+  const egg = $('hrEgg');
+  if (egg) egg.addEventListener('click', closeHrEgg);
+
+  // Secret word, typed anywhere.
+  const SECRET = 'hathaway';
+  let buf = '';
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') return closeHrEgg();
+    if (e.metaKey || e.ctrlKey || e.altKey || e.key.length !== 1) return;
+    buf = (buf + e.key.toLowerCase()).slice(-SECRET.length);
+    if (buf === SECRET) {
+      buf = '';
+      openHrEgg();
+    }
+  });
+
+  // Tap the wordmark seven times, fast.
+  const mark = $('wordmark');
+  if (mark) {
+    let taps = 0;
+    let tapTimer = 0;
+    mark.addEventListener('click', () => {
+      taps += 1;
+      clearTimeout(tapTimer);
+      tapTimer = setTimeout(() => (taps = 0), 600);
+      if (taps >= 7) {
+        taps = 0;
+        openHrEgg();
+      }
+    });
+  }
+
+  // The 💼 pip (shown only for HR/Misra).
+  const pip = $('hrPip');
+  if (pip) pip.addEventListener('click', openHrEgg);
+
+  updateHrPip();
+}
+
 function wireEvents() {
   $('recordBtn').addEventListener('click', () => (state.recording ? stopRecording('save') : startRecording()));
   $('cancelBtn').addEventListener('click', () => stopRecording('cancel'));
@@ -1703,6 +1773,7 @@ function wireEvents() {
   $('userNameInput').addEventListener('change', async (e) => {
     state.settings = await api.setUserName(e.target.value);
     e.target.value = state.settings.userName;
+    updateHrPip(); // reveal/hide the 💼 pip when the name reads as HR
   });
 
   // search
@@ -1920,6 +1991,8 @@ function wireEvents() {
     requestAnimationFrame(() => updatePill.classList.add('show'));
     toast('A new version is ready — restart when you like.');
   });
+
+  wireEasterEgg();
 }
 
 // ---------------------------------------------------------------- init
@@ -1930,6 +2003,7 @@ async function init() {
 
   await refreshSettings();
   applyTheme(state.settings.theme);
+  updateHrPip();
   $('shortcutChip').textContent = formatShortcut(state.settings.shortcut);
 
   state.records = await api.listRecordings();

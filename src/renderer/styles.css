@@ -180,6 +180,8 @@ button {
   padding: 0 16px 0 86px;
 }
 .wordmark {
+  -webkit-app-region: no-drag; /* so the secret 7× tap registers clicks */
+  cursor: default; /* stays unclickable-looking — it's a secret */
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -192,6 +194,7 @@ button {
   font-style: italic;
   letter-spacing: 0.005em;
   color: var(--ink-2);
+  user-select: none;
 }
 .wordmark-mark {
   color: var(--primary);
@@ -272,6 +275,132 @@ button {
   }
   .update-pill.show {
     transform: none;
+  }
+}
+
+/* HR easter egg (inside joke for Misra) -------------------------------------
+   A 💼 pip on the left of the title bar — only shown when "Your name" reads as
+   HR/Misra — and a full-window meme takeover with an eerie green eye-glow. */
+.hr-pip {
+  -webkit-app-region: no-drag;
+  position: absolute;
+  left: 92px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.5;
+  cursor: pointer;
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.hr-pip:hover {
+  opacity: 1;
+}
+.hr-pip:active {
+  transform: scale(0.9);
+}
+.hr-pip[hidden] {
+  display: none;
+}
+
+.hr-egg {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: oklch(0.12 0.01 84 / 0.72);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 260ms var(--ease);
+}
+.hr-egg.show {
+  opacity: 1;
+}
+.hr-egg[hidden] {
+  display: none; /* overrides the grid display when the attribute is set */
+}
+.hr-egg-card {
+  position: relative;
+  margin: 0;
+  max-width: min(560px, 86vw);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-pop);
+  transform: scale(0.94);
+  transition: transform 320ms var(--ease);
+  animation: hr-glow 1.8s ease-in-out infinite;
+}
+.hr-egg.show .hr-egg-card {
+  transform: scale(1);
+}
+.hr-egg-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  -webkit-user-drag: none;
+}
+.hr-egg-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(120% 78% at 50% 44%, oklch(0.85 0.24 145 / 0.3), transparent 55%);
+  mix-blend-mode: screen;
+  animation: hr-veil 1.8s ease-in-out infinite;
+}
+.hr-egg-cap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 34px 18px 15px;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 1.0625rem;
+  color: oklch(0.98 0 0);
+  text-align: center;
+  text-wrap: balance;
+  background: linear-gradient(transparent, oklch(0.1 0.01 84 / 0.85));
+}
+@keyframes hr-glow {
+  0%,
+  100% {
+    box-shadow: var(--shadow-pop), 0 0 0 0 oklch(0.85 0.24 145 / 0);
+  }
+  50% {
+    box-shadow: var(--shadow-pop), 0 0 48px 6px oklch(0.82 0.26 145 / 0.55);
+  }
+}
+@keyframes hr-veil {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hr-egg,
+  .hr-egg-card {
+    transition: opacity 200ms var(--ease);
+  }
+  .hr-egg-card {
+    animation: none;
+    transform: none;
+  }
+  .hr-egg.show .hr-egg-card {
+    transform: none;
+  }
+  .hr-egg-card::after {
+    animation: none;
+    opacity: 0.4;
   }
 }
 

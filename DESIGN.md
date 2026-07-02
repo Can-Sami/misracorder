@@ -82,9 +82,12 @@ perfect circle.
 
 150–250 ms, ease-out (cubic-bezier(0.22, 1, 0.36, 1)). Motion conveys state only.
 
-- **Record control states:** idle (indigo filled circle, mic glyph) → recording (morphs to
-  rounded-square stop, soft `--live` glow, gentle breathing pulse) → transcribing (indigo
-  ring shimmer). Crossfade between states.
+- **Record control — the drop of ink.** The one theatrical moment in the app.
+  Idle: an organic indigo droplet whose silhouette slowly morphs (12s), whose
+  interior currents swirl (10s), and which breathes (5.2s) — three cycles out
+  of phase, so it never repeats. Recording: the ink turns coral, the currents
+  quicken, organic rings ripple outward, and the aura swells with the live mic
+  level. Reduced motion: a still droplet, color states only.
 - **Live waveform:** real-time amplitude bars driven by mic RMS; smooth, organic, centered.
 - **History rows:** subtle stagger on first paint; hover lifts to --surface-2 in 150 ms.
 - **prefers-reduced-motion:** waveform becomes a static level bar; pulses become opacity

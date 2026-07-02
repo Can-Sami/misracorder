@@ -65,6 +65,9 @@ contextBridge.exposeInMainWorld('api', {
   // shortcut label for the UI chip
   getShortcut: () => ipcRenderer.invoke('app:shortcut'),
 
+  // clipboard (main-process — reliable regardless of window focus)
+  copyText: (text) => ipcRenderer.invoke('app:copyText', text),
+
   // events from main → renderer
   onRecordingUpdated: (cb) => {
     const handler = (_e, record) => cb(record);

@@ -94,11 +94,12 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-// Best-effort clipboard write: throws when the window isn't focused (e.g. the
-// user switched apps mid-action) — that must never abort the calling flow.
+// Clipboard write via the main process: the renderer's navigator.clipboard
+// rejects on focus loss and needs a session permission grant — the Electron
+// clipboard module has neither problem. Never aborts the calling flow.
 async function copyText(text) {
   try {
-    await navigator.clipboard.writeText(text);
+    await api.copyText(text);
     return true;
   } catch {
     return false;

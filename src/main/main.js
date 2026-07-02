@@ -11,6 +11,7 @@ const {
   nativeTheme,
   dialog,
   desktopCapturer,
+  clipboard,
 } = require('electron');
 const path = require('path');
 const fsp = require('fs/promises');
@@ -206,12 +207,12 @@ function createWindow() {
 
 function wirePermissions() {
   // Electron's session denies getUserMedia by default — independent of OS TCC.
+  // clipboard-sanitized-write backs navigator.clipboard.writeText (copy buttons).
+  const ALLOWED = ['media', 'microphone', 'audioCapture', 'clipboard-sanitized-write'];
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => {
-    cb(['media', 'microphone', 'audioCapture'].includes(permission));
+    cb(ALLOWED.includes(permission));
   });
-  session.defaultSession.setPermissionCheckHandler((wc, permission) =>
-    ['media', 'microphone', 'audioCapture'].includes(permission)
-  );
+  session.defaultSession.setPermissionCheckHandler((wc, permission) => ALLOWED.includes(permission));
 
   // System-audio capture: when the renderer calls getDisplayMedia(), grant a
   // screen source plus loopback (the Mac's audio output). The renderer keeps the
@@ -697,3 +698,10 @@ app.on('will-quit', () => {
 
 // Expose the toggle shortcut label to the renderer via a simple getter.
 ipcMain.handle('app:shortcut', () => config.getShortcut());
+
+// Clipboard writes run in the main process: the renderer's async clipboard
+// rejects when the window loses focus mid-action, this never does.
+ipcMain.handle('app:copyText', (_e, text) => {
+  clipboard.writeText(String(text ?? ''));
+  return true;
+});

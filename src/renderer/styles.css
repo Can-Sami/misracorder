@@ -674,15 +674,6 @@ button {
   gap: 8px;
   flex: 0 0 auto;
 }
-.semantic-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.semantic-chip svg {
-  opacity: 0.9;
-}
-
 /* ----------------------------------------------------------------- history */
 .history {
   flex: 1 1 auto;
@@ -743,6 +734,15 @@ button {
   color: var(--ink-2);
   background: linear-gradient(var(--bg) 72%, transparent);
   backdrop-filter: blur(2px);
+}
+/* quiet sub-header for the meaning-matched tail of search results */
+.group-head-sub {
+  padding: 20px 12px 6px;
+  font-size: 0.71875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .entry {

@@ -283,7 +283,9 @@ async function setAutoTitle(id, title) {
 // --- embeddings (kept in a separate file so the manifest stays small) -----
 
 function embeddingsPath() {
-  return path.join(rootDir, 'embeddings.json');
+  // v2: vectors are task-typed (RETRIEVAL_DOCUMENT); the old untyped file is
+  // simply abandoned and everything re-indexes on first search.
+  return path.join(rootDir, 'embeddings-v2.json');
 }
 
 async function loadEmbeddings() {

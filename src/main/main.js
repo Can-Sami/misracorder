@@ -329,8 +329,10 @@ async function runTranscription(record) {
         console.warn('[title] failed:', e.message);
       }
       try {
-        const vec = await gemini.embedText({ apiKey, text, signal: controller.signal });
-        await storage.setEmbedding(record.id, vec);
+        if (text.trim().length >= 25) {
+          const vec = await gemini.embedText({ apiKey, text, signal: controller.signal });
+          await storage.setEmbedding(record.id, vec);
+        }
       } catch (e) {
         console.warn('[embed] failed:', e.message);
       }
@@ -446,7 +448,7 @@ function wireIpc() {
     const apiKey = config.getApiKey();
     if (!apiKey) return { ok: false, reason: 'no_key' };
     try {
-      return { ok: true, vector: await gemini.embedText({ apiKey, text }) };
+      return { ok: true, vector: await gemini.embedText({ apiKey, text, taskType: 'RETRIEVAL_QUERY' }) };
     } catch (err) {
       return { ok: false, error: err.message };
     }
@@ -461,7 +463,11 @@ function wireIpc() {
     if (!apiKey) return { ok: false, reason: 'no_key' };
     const records = await storage.loadManifest();
     const embs = await storage.loadEmbeddings();
-    const todo = records.filter((r) => r.status === 'done' && r.transcript && !embs[r.id]);
+    // Skip near-empty transcripts: their embeddings are degenerate and score
+    // deceptively high against any query.
+    const todo = records.filter(
+      (r) => r.status === 'done' && (r.transcript || '').trim().length >= 25 && !embs[r.id]
+    );
     let added = 0;
     const CONCURRENCY = 6;
     for (let i = 0; i < todo.length; i += CONCURRENCY) {

@@ -698,7 +698,10 @@ async function generateTitle({ apiKey, model, transcript, signal }) {
 
 // --- public: embeddings ---------------------------------------------------
 
-async function embedText({ apiKey, text, signal }) {
+// taskType matters: asymmetric retrieval embeddings (RETRIEVAL_DOCUMENT for
+// stored transcripts, RETRIEVAL_QUERY for what the user types) score much
+// better than same-mode similarity for search.
+async function embedText({ apiKey, text, taskType = 'RETRIEVAL_DOCUMENT', signal }) {
   if (!apiKey) throw new Error('No Gemini API key configured.');
   const res = await fetch(`${HOST}/v1beta/models/${EMBED_MODEL}:embedContent`, {
     method: 'POST',
@@ -707,6 +710,7 @@ async function embedText({ apiKey, text, signal }) {
       model: `models/${EMBED_MODEL}`,
       content: { parts: [{ text: (text || '').slice(0, 8000) }] },
       outputDimensionality: EMBED_DIM,
+      taskType,
     }),
     signal,
   });

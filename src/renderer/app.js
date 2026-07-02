@@ -24,9 +24,9 @@ const state = {
   recordingSysName: null, // app name captured for the current recording's system audio
   systemAudioRouted: false, // a Multi-Output Device is active for this recording
   micLocked: false, // we deliberately chose the mic — don't auto-switch it
-  semantic: localStorage.getItem('misra.semantic') === '1', // semantic search on/off
   embeddings: null, // { id: vector } cache
-  semanticOrder: null, // [{ id, score }] for the current semantic query
+  semanticOrder: null, // [{ id, score }] for the current query, by meaning
+  indexing: false, // an embedding backfill is running
   progress: {}, // id -> { done, total } chunk progress while (re-)transcribing
   segments: {}, // id -> segments data (or null once fetched and absent)
   view: 'mine', // 'mine' | 'inbox' — which library the list shows
@@ -159,11 +159,6 @@ function filteredRecords() {
   }
 
   if (state.query) {
-    if (state.semantic && state.semanticOrder) {
-      // rank by semantic similarity (period filter already applied above)
-      const scoreById = new Map(state.semanticOrder.map((s) => [s.id, s.score]));
-      return recs.filter((r) => scoreById.has(r.id)).sort((a, b) => scoreById.get(b.id) - scoreById.get(a.id));
-    }
     const q = state.query.toLowerCase();
     recs = recs.filter((r) => `${r.title || ''} ${r.transcript || ''}`.toLowerCase().includes(q));
   }
@@ -196,56 +191,33 @@ function scheduleSemantic() {
   semanticTimer = setTimeout(runSemanticSearch, 350);
 }
 
+// Meaning search runs quietly alongside keyword search: exact matches show
+// instantly, and anything else the query *means* appears below them as
+// "More by meaning". No mode, no toggle — search just finds things.
 async function runSemanticSearch() {
   const q = state.query;
-  if (!q || !state.semantic) return;
+  if (!q) return;
   if (!state.embeddings) state.embeddings = await api.getEmbeddings();
-  // Nothing indexed yet → index now, then continue (covers searching mid-indexing).
-  if (!state.embeddings || !Object.keys(state.embeddings).length) {
-    toast('Indexing recordings for semantic search…');
-    await api.backfillEmbeddings();
-    state.embeddings = await api.getEmbeddings();
+  // Nothing indexed yet → index once in the background, then continue.
+  if ((!state.embeddings || !Object.keys(state.embeddings).length) && !state.indexing) {
+    state.indexing = true;
+    try {
+      await api.backfillEmbeddings();
+      state.embeddings = await api.getEmbeddings();
+    } finally {
+      state.indexing = false;
+    }
   }
   const res = await api.embedQuery(q);
-  if (!res || !res.ok) {
-    toast(
-      res && res.reason === 'no_key'
-        ? 'Add a Gemini API key to use semantic search.'
-        : `Semantic search unavailable: ${(res && res.error) || 'unknown error'}`
-    );
-    state.semantic = false;
-    updateSemanticToggle();
-    renderHistory();
-    return;
-  }
+  if (q !== state.query) return; // the user kept typing
+  if (!res || !res.ok) return; // no key / offline — keyword results stand alone
   const qv = res.vector;
-  const order = Object.entries(state.embeddings || {})
+  state.semanticOrder = Object.entries(state.embeddings || {})
     .map(([id, vec]) => ({ id, score: cosine(qv, vec) }))
-    .sort((a, b) => b.score - a.score);
-  const strong = order.filter((o) => o.score >= 0.6).slice(0, 50);
-  state.semanticOrder = strong.length ? strong : order.slice(0, 10);
+    .filter((o) => o.score >= 0.55)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 12);
   renderHistory();
-}
-
-function updateSemanticToggle() {
-  const btn = $('semanticToggle');
-  if (btn) btn.classList.toggle('active', state.semantic);
-}
-
-async function toggleSemantic() {
-  state.semantic = !state.semantic;
-  localStorage.setItem('misra.semantic', state.semantic ? '1' : '0');
-  updateSemanticToggle();
-  if (state.semantic) {
-    toast('Semantic search on — indexing recordings…');
-    const res = await api.backfillEmbeddings();
-    state.embeddings = await api.getEmbeddings();
-    if (res && res.added) toast(`Indexed ${res.added} recording${res.added === 1 ? '' : 's'}.`);
-    if (state.query) runSemanticSearch();
-  } else {
-    state.semanticOrder = null;
-    renderHistory();
-  }
 }
 
 function renderHistory() {
@@ -282,22 +254,23 @@ function renderHistory() {
   empty.hidden = true;
 
   const recs = filteredRecords();
-  if (!recs.length) {
+
+  // Recordings the query *means* but doesn't literally contain. Near-empty
+  // transcripts are excluded — their embeddings match everything.
+  let extras = [];
+  if (state.query && state.semanticOrder) {
+    const shown = new Set(recs.map((r) => r.id));
+    extras = state.semanticOrder
+      .map((o) => state.records.find((r) => r.id === o.id))
+      .filter((r) => r && !shown.has(r.id) && (r.transcript || '').trim().length >= 25);
+  }
+
+  if (!recs.length && !extras.length) {
     searchEmpty.hidden = false;
     groups.innerHTML = '';
     return;
   }
   searchEmpty.hidden = true;
-
-  // Semantic search → a flat list ranked by relevance (don't regroup by day).
-  if (state.semantic && state.query && state.semanticOrder) {
-    groups.innerHTML =
-      `<section class="group"><div class="group-head">Best matches</div>` +
-      recs.map(entryHtml).join('') +
-      `</section>`;
-    updatePlayingUI();
-    return;
-  }
 
   const byDay = new Map();
   for (const rec of recs) {
@@ -309,6 +282,11 @@ function renderHistory() {
   for (const [label, list] of byDay) {
     html += `<section class="group"><div class="group-head">${label}</div>`;
     html += list.map(entryHtml).join('');
+    html += '</section>';
+  }
+  if (extras.length) {
+    html += `<section class="group"><div class="group-head-sub">More by meaning</div>`;
+    html += extras.map(entryHtml).join('');
     html += '</section>';
   }
   groups.innerHTML = html;
@@ -1661,12 +1639,10 @@ function onSearch() {
   const has = Boolean(state.query);
   $('searchClear').hidden = !has;
   $('kbdHint').hidden = has; // swap the ⌘F hint for the clear button while typing
-  if (state.semantic && has) {
-    scheduleSemantic();
-  } else {
-    state.semanticOrder = null;
-    renderHistory();
-  }
+  // Keyword matches render instantly; meaning matches follow a beat later.
+  state.semanticOrder = null;
+  renderHistory();
+  if (has) scheduleSemantic();
 }
 function clearSearch() {
   $('searchInput').value = '';
@@ -1746,7 +1722,6 @@ function wireEvents() {
     $('sortLabel').textContent = state.sort === 'new' ? 'Newest' : 'Oldest';
     renderHistory();
   });
-  $('semanticToggle').addEventListener('click', toggleSemantic);
 
   // history (delegated): action buttons first, else open detail
   const groups = $('groups');
@@ -1945,7 +1920,6 @@ async function init() {
   await refreshSettings();
   applyTheme(state.settings.theme);
   $('shortcutChip').textContent = formatShortcut(state.settings.shortcut);
-  updateSemanticToggle();
 
   state.records = await api.listRecordings();
   renderHistory();

@@ -11,7 +11,9 @@ organized by date. Native-feeling, calm, and fast.
 - **Share recordings with friends** who use Misracorder (they get a ping), or with
   anyone via a web link with a player + transcript. Everything stays local until you
   hit Share.
-- **Search** by keyword, or flip on **Semantic** search to find recordings by meaning.
+- **Search that just finds things.** Exact matches appear instantly; recordings
+  that only *mean* what you typed follow under "More by meaning" — no modes, no
+  toggles.
 - Filter by date, rename recordings, copy/export transcripts.
 - Auto-uses your **headphone mic** when connected, falls back to the built-in mic.
 - Optionally records your Mac's **system audio** alongside the mic — great for calls.

@@ -251,6 +251,23 @@ async function setTitle(id, title) {
   return updated;
 }
 
+// --- cloud sharing pointers --------------------------------------------------
+// A recording that has been uploaded remembers its cloud identity so re-shares
+// upsert instead of duplicating and the UI can show share state.
+
+async function setCloudInfo(id, cloud) {
+  const record = await getRecord(id);
+  if (!record) throw new Error(`No recording ${id}`);
+  const updated = { ...record, cloud: cloud || null };
+  await writeSidecarFor(updated);
+  await upsertRecord(updated);
+  return updated;
+}
+
+async function clearCloudInfo(id) {
+  return setCloudInfo(id, null);
+}
+
 // Set an auto-generated (Gemini) title — never overrides a user-set title.
 async function setAutoTitle(id, title) {
   const record = await getRecord(id);
@@ -371,6 +388,8 @@ module.exports = {
   renameSpeaker,
   setTitle,
   setAutoTitle,
+  setCloudInfo,
+  clearCloudInfo,
   loadEmbeddings,
   setEmbedding,
   deleteEmbedding,

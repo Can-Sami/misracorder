@@ -23,6 +23,8 @@ let state = {
   systemAudio: true, // also capture the Mac's audio output (mixed with the mic)
   userName: 'Me', // speaker label for the microphone (your voice)
   pendingOutputRestore: null, // output device UID to restore if we crash mid-recording
+  cloudSession: null, // { refreshEnc|refreshPlain, userId, displayName } — sharing identity
+  shareLastNotifiedAt: null, // newest share creation time we've already notified about
 };
 
 function init() {
@@ -130,6 +132,51 @@ function setUserName(name) {
   return persist();
 }
 
+// --- cloud sharing session --------------------------------------------------
+// The Supabase refresh token is at-rest-encrypted exactly like the Gemini key;
+// the renderer only ever learns "connected as <name>".
+
+function setCloudSession(sessionInfo) {
+  if (!sessionInfo) {
+    state.cloudSession = null;
+    return persist();
+  }
+  const { refreshToken, userId, displayName } = sessionInfo;
+  const entry = { userId, displayName };
+  if (safeStorage.isEncryptionAvailable()) {
+    entry.refreshEnc = safeStorage.encryptString(refreshToken).toString('base64');
+  } else {
+    entry.refreshPlain = refreshToken;
+  }
+  state.cloudSession = entry;
+  return persist();
+}
+
+function getCloudSession() {
+  const s = state.cloudSession;
+  if (!s) return null;
+  let refreshToken = s.refreshPlain || null;
+  if (!refreshToken && s.refreshEnc) {
+    try {
+      refreshToken = safeStorage.decryptString(Buffer.from(s.refreshEnc, 'base64'));
+    } catch (err) {
+      console.error('[config] could not decrypt cloud session:', err.message);
+      return null;
+    }
+  }
+  if (!refreshToken) return null;
+  return { refreshToken, userId: s.userId, displayName: s.displayName };
+}
+
+function getShareLastNotifiedAt() {
+  return state.shareLastNotifiedAt || null;
+}
+
+function setShareLastNotifiedAt(iso) {
+  state.shareLastNotifiedAt = iso || null;
+  return persist();
+}
+
 // Internal: the real output device to restore after a system-audio recording.
 // Persisted so we can recover if the app is force-quit while routing is active.
 function getPendingOutputRestore() {
@@ -161,6 +208,8 @@ function publicSettings() {
     shortcut: getShortcut(),
     systemAudio: getSystemAudio(),
     userName: getUserName(),
+    cloudConnected: Boolean(state.cloudSession),
+    cloudDisplayName: state.cloudSession ? state.cloudSession.displayName : null,
   };
 }
 
@@ -180,6 +229,10 @@ module.exports = {
   setSystemAudio,
   getUserName,
   setUserName,
+  setCloudSession,
+  getCloudSession,
+  getShareLastNotifiedAt,
+  setShareLastNotifiedAt,
   getPendingOutputRestore,
   setPendingOutputRestore,
   getRootDir,

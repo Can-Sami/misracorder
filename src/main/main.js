@@ -20,6 +20,7 @@ const config = require('./config');
 const storage = require('./storage');
 const gemini = require('./gemini');
 const wavUtil = require('./wav');
+const cloud = require('./supabase');
 
 let lastActiveApp = null; // app the user was in when they hit the global shortcut
 
@@ -503,11 +504,26 @@ function wireIpc() {
 
   ipcMain.handle('recordings:setTitle', (_e, id, title) => storage.setTitle(id, title));
 
-  ipcMain.handle('recordings:delete', async (_e, id) => {
+  ipcMain.handle('recordings:delete', async (_e, id, alsoCloud) => {
     const ctrl = inFlight.get(id);
     if (ctrl) ctrl.abort();
+    if (alsoCloud) await cloud.deleteCloud(id); // best-effort; local delete proceeds regardless
     return storage.deleteRecording(id);
   });
+
+  // --- cloud sharing ---
+  ipcMain.handle('cloud:redeem', (_e, code, displayName) => cloud.redeemInvite(code, displayName));
+  ipcMain.handle('cloud:status', () => cloud.status());
+  ipcMain.handle('cloud:signOut', () => cloud.signOut());
+  ipcMain.handle('share:profiles', () => cloud.listProfiles());
+  ipcMain.handle('share:status', (_e, id) => cloud.shareStatus(id));
+  ipcMain.handle('share:create', (_e, opts) => cloud.shareCreate(opts));
+  ipcMain.handle('share:revokeUser', (_e, id, recipientId) => cloud.revokeShare(id, recipientId));
+  ipcMain.handle('share:revokeLink', (_e, id) => cloud.revokeLink(id));
+  ipcMain.handle('share:deleteCloud', (_e, id) => cloud.deleteCloud(id));
+  ipcMain.handle('inbox:list', () => cloud.listInbox());
+  ipcMain.handle('inbox:markSeen', (_e, shareId) => cloud.markSeen(shareId));
+  ipcMain.handle('inbox:play', (_e, shareId) => cloud.playShared(shareId));
 
   ipcMain.handle('recordings:reveal', async (_e, id) => {
     const record = await storage.getRecord(id);
@@ -623,6 +639,21 @@ app.whenReady().then(async () => {
   wireIpc();
   createWindow();
   registerShortcut();
+
+  // Cloud sharing: resume the saved identity and keep the inbox fresh when the
+  // app comes back to the foreground.
+  cloud.init({
+    send,
+    focus: () => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.show();
+        win.focus();
+      }
+    },
+  });
+  app.on('browser-window-focus', () => cloud.pollSoon());
+  require('electron').powerMonitor.on('resume', () => cloud.pollSoon());
 
   // Recover audio routing if a previous run was force-quit while recording system
   // audio: restore the saved output device and remove any leftover Multi-Output Device.

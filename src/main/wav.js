@@ -73,18 +73,22 @@ function decodeStereo(buffer) {
   return { left, right, sampleRate, frames };
 }
 
-// Split a stereo recording into time windows for chunked transcription. Long
-// audio (many minutes) overwhelms one-shot transcription — the model stops
-// segmenting and emits a wall of text — so we cut it into ~chunkSec windows and
-// transcribe each independently. Boundaries snap to the quietest spot within
-// ±snapSec of each nominal cut so we never slice through the middle of a word.
-// Returns { sampleRate, durationSec, chunks: [{ startSec, endSec, left, right }] }
-// where left/right are mono WAV buffers, or null for non-stereo input.
-function chunkStereo(buffer, { chunkSec = 180, snapSec = 4 } = {}) {
-  const decoded = decodeStereo(buffer);
-  if (!decoded) return null;
-  const { left: L, right: R, sampleRate, frames } = decoded;
+// Decode a mono WAV into an Int16Array. Returns null if not mono.
+function decodeMono(buffer) {
+  const { numChannels, sampleRate, dataOffset, dataSize } = readHeader(buffer);
+  if (numChannels !== 1) return null;
+  const frames = Math.floor(dataSize / 2);
+  const samples = new Int16Array(frames);
+  for (let i = 0; i < frames; i++) samples[i] = buffer.readInt16LE(dataOffset + i * 2);
+  return { samples, sampleRate, frames };
+}
 
+// Time-window boundaries for chunked transcription, shared by the stereo and
+// mono chunkers. Long audio (many minutes) overwhelms one-shot transcription —
+// the model stops segmenting and emits a wall of text — so we cut it into
+// ~chunkSec windows. Boundaries snap to the quietest spot within ±snapSec of
+// each nominal cut so we never slice through the middle of a word.
+function cutBounds(tracks, sampleRate, frames, { chunkSec = 180, snapSec = 4 } = {}) {
   const chunkFrames = Math.max(1, Math.floor(chunkSec * sampleRate));
   const snapFrames = Math.max(0, Math.floor(snapSec * sampleRate));
   const win = Math.max(1, Math.floor(0.2 * sampleRate)); // 200ms energy window
@@ -99,7 +103,9 @@ function chunkStereo(buffer, { chunkSec = 180, snapSec = 4 } = {}) {
     let bestE = Infinity;
     for (let c = lo; c <= hi; c += step) {
       let e = 0;
-      for (let i = c - win; i < c + win; i++) e += Math.abs(L[i]) + Math.abs(R[i]);
+      for (const t of tracks) {
+        for (let i = c - win; i < c + win; i++) e += Math.abs(t[i]);
+      }
       if (e < bestE) {
         bestE = e;
         best = c;
@@ -117,6 +123,17 @@ function chunkStereo(buffer, { chunkSec = 180, snapSec = 4 } = {}) {
     nominal += chunkFrames;
   }
   bounds.push(frames);
+  return bounds;
+}
+
+// Split a stereo recording into time windows for chunked transcription.
+// Returns { sampleRate, durationSec, chunks: [{ startSec, endSec, left, right }] }
+// where left/right are mono WAV buffers, or null for non-stereo input.
+function chunkStereo(buffer, opts) {
+  const decoded = decodeStereo(buffer);
+  if (!decoded) return null;
+  const { left: L, right: R, sampleRate, frames } = decoded;
+  const bounds = cutBounds([L, R], sampleRate, frames, opts);
 
   const chunks = [];
   for (let k = 0; k < bounds.length - 1; k++) {
@@ -133,4 +150,27 @@ function chunkStereo(buffer, { chunkSec = 180, snapSec = 4 } = {}) {
   return { sampleRate, durationSec: frames / sampleRate, chunks };
 }
 
-module.exports = { splitStereo, decodeStereo, chunkStereo, encodeMonoWav, readHeader };
+// Split a mono recording (e.g. an in-room meeting on one mic) the same way.
+// Returns { sampleRate, durationSec, chunks: [{ startSec, endSec, mono }] }
+// where mono is a WAV buffer, or null for non-mono input.
+function chunkMono(buffer, opts) {
+  const decoded = decodeMono(buffer);
+  if (!decoded) return null;
+  const { samples, sampleRate, frames } = decoded;
+  const bounds = cutBounds([samples], sampleRate, frames, opts);
+
+  const chunks = [];
+  for (let k = 0; k < bounds.length - 1; k++) {
+    const a = bounds[k];
+    const b = bounds[k + 1];
+    if (b <= a) continue;
+    chunks.push({
+      startSec: a / sampleRate,
+      endSec: b / sampleRate,
+      mono: encodeMonoWav(samples.subarray(a, b), sampleRate),
+    });
+  }
+  return { sampleRate, durationSec: frames / sampleRate, chunks };
+}
+
+module.exports = { splitStereo, decodeStereo, decodeMono, chunkStereo, chunkMono, encodeMonoWav, readHeader };

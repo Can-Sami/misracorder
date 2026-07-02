@@ -1655,11 +1655,11 @@ function clearSearch() {
 }
 
 // ---------------------------------------------------------------- wiring
-// ------------------------------------------------- easter egg (HR / Misra 💼)
+// ------------------------------------------------- easter egg (HR 💼)
 // An inside joke: Misracorder records your calls, and HR is always watching.
 // Summoned three ways — the secret word, a 7× logo tap, or the 💼 pip that only
-// appears when "Your name" reads as HR/Misra.
-const HR_NAME_RE = /\b(hr|misra|human\s*resources)\b/i;
+// appears when "Your name" reads as HR (not a person's name).
+const HR_NAME_RE = /\b(hr|human\s*resources)\b/i;
 let hrEggOpen = false;
 
 function updateHrPip() {

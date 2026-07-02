@@ -71,6 +71,10 @@
 
         <!-- Search -->
         <div class="toolbar">
+          <div class="view-seg" id="viewSeg" role="tablist" hidden>
+            <button class="active" data-view="mine" role="tab">Recordings</button>
+            <button data-view="inbox" role="tab">Shared with me<span class="unread-dot" id="inboxDot" hidden></span></button>
+          </div>
           <div class="search">
             <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
               <circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.7"/>
@@ -122,7 +126,12 @@
             <p class="empty-title">No matches</p>
             <p class="empty-sub">Nothing in your transcripts matches that search.</p>
           </div>
+          <div class="empty" id="inboxEmpty" hidden>
+            <p class="empty-title">Nothing shared with you yet</p>
+            <p class="empty-sub">When a friend shares a recording, it lands here with a ping.</p>
+          </div>
           <div class="groups" id="groups"></div>
+          <div class="groups" id="inboxGroups" hidden></div>
         </section>
       </main>
 
@@ -153,10 +162,30 @@
 
         <footer class="sheet-actions">
           <button class="ghost" id="copyBtn">Copy</button>
+          <button class="ghost" id="shareBtn">Share…</button>
           <button class="ghost" id="exportBtn">Save transcript…</button>
           <button class="ghost" id="retranscribeBtn">Re-transcribe</button>
           <button class="ghost" id="revealBtn">Show in Finder</button>
           <button class="ghost danger" id="deleteBtn">Delete</button>
+        </footer>
+      </aside>
+
+      <!-- Share (slides over) -->
+      <aside class="sheet share" id="shareSheet" aria-hidden="true">
+        <header class="sheet-head">
+          <button class="icon-btn back-btn" id="shareBack" aria-label="Back">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="sheet-title">
+            <div class="dt-main" id="shareTitle">Share</div>
+            <div class="dt-sub" id="shareSub"></div>
+          </div>
+        </header>
+        <div class="share-body" id="shareBody"></div>
+        <footer class="sheet-actions share-actions" id="shareActions" hidden>
+          <span class="share-progress" id="shareProgress"></span>
+          <button class="ghost danger" id="shareRemoveCloudBtn" hidden>Remove from cloud</button>
+          <button class="solid" id="shareApplyBtn">Share</button>
         </footer>
       </aside>
 
@@ -218,6 +247,26 @@
             <label for="userNameInput">Your name (for call transcripts)</label>
             <input type="text" id="userNameInput" placeholder="Me" spellcheck="false" maxlength="40" autocomplete="off" />
             <p class="field-hint">In call transcripts, your voice (the microphone) is labeled with this; the other side is labeled with the app's name.</p>
+          </div>
+
+          <div class="field">
+            <label>Sharing</label>
+            <div id="sharingDisconnected">
+              <div class="share-connect">
+                <input type="text" id="inviteCodeInput" placeholder="Invite code" spellcheck="false" autocomplete="off" autocapitalize="characters" />
+                <input type="text" id="displayNameInput" placeholder="Your name for friends" spellcheck="false" maxlength="40" autocomplete="off" />
+                <button class="solid" id="connectBtn">Connect</button>
+              </div>
+              <p class="field-hint">Share recordings with other Misracorder users. Enter your invite code and pick the name friends will see.</p>
+            </div>
+            <div id="sharingConnected" hidden>
+              <div class="share-connected-row">
+                <span class="share-connected-text">Connected as <strong id="cloudNameLabel"></strong></span>
+                <button class="ghost" id="signOutBtn">Sign out</button>
+              </div>
+              <p class="field-hint">Share from any recording's ••• menu. Shares land in your friends' “Shared with me”.</p>
+            </div>
+            <div class="key-status" id="cloudStatus"></div>
           </div>
 
           <div class="field">

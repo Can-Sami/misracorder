@@ -1380,6 +1380,184 @@ audio {
   display: none;
 }
 
+/* ------------------------------------------------------------- sharing */
+
+/* Recordings / Shared-with-me switcher (compact segmented, sits by search) */
+.view-seg {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 3px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.view-seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  white-space: nowrap;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.view-seg button:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.view-seg button.active {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.unread-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--primary);
+  display: inline-block;
+}
+.unread-dot.inline {
+  margin-right: 7px;
+  transform: translateY(-1px);
+}
+
+/* cloud glyph on shared rows */
+.shared-mark {
+  display: inline-block;
+  margin-left: 7px;
+  color: var(--muted);
+  vertical-align: 1px;
+}
+
+/* inbox rows */
+.entry-from {
+  font-size: 0.75rem;
+  color: var(--primary-ink);
+  margin: 1px 0 2px;
+}
+.inbox-entry.unseen .entry-title {
+  color: var(--ink);
+}
+
+/* share sheet */
+.share-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.share-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.share-section-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.share-people {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.share-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background 120ms var(--ease);
+}
+.share-person:hover {
+  background: var(--surface-2);
+}
+.share-avatar {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.share-name {
+  flex: 1 1 auto;
+  font-size: 0.875rem;
+  color: var(--ink);
+}
+.share-check {
+  accent-color: var(--primary);
+  width: 16px;
+  height: 16px;
+}
+.share-url-row {
+  display: flex;
+  gap: 8px;
+}
+.share-url-row input {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-2);
+}
+.share-nudge {
+  padding: 24px 0;
+  font-size: 0.875rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.share-actions {
+  align-items: center;
+}
+.share-progress {
+  flex: 1 1 auto;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+/* sharing settings */
+.share-connect {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+.share-connect #inviteCodeInput {
+  grid-column: 1 / -1;
+  font-family: var(--font-mono);
+}
+.share-connected-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.share-connected-text {
+  font-size: 0.875rem;
+  color: var(--ink-2);
+}
+.share-connected-text strong {
+  color: var(--ink);
+}
+
+/* read-only mode for shared recordings in the detail sheet */
+.detail.shared .sheet-actions .ghost:not(#copyBtn) {
+  display: none;
+}
+.detail.shared .dt-main-input {
+  pointer-events: none;
+}
+
 /* ------------------------------------------------------- reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *,

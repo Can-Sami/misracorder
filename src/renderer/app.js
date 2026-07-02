@@ -29,6 +29,12 @@ const state = {
   semanticOrder: null, // [{ id, score }] for the current semantic query
   progress: {}, // id -> { done, total } chunk progress while (re-)transcribing
   segments: {}, // id -> segments data (or null once fetched and absent)
+  view: 'mine', // 'mine' | 'inbox' — which library the list shows
+  inbox: { items: [], unread: 0 }, // shares to me (pushed from main)
+  sharedDetail: null, // inbox item open in the detail sheet (read-only mode)
+  shareFor: null, // recording id the share sheet is about
+  shareInfo: null, // latest share:status for shareFor
+  shareRoster: [], // [{ id, displayName }] cached for the recipient picker
 };
 
 let recorder = null;
@@ -46,6 +52,8 @@ const ICON = {
   save: '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 4v10m0 0l-3.5-3.5M12 14l3.5-3.5M5 19h14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   finder: '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
   trash: '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M6.5 7l1 12h9l1-12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  share: '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 15V4m0 0L8.5 7.5M12 4l3.5 3.5M6 12v7h12v-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  cloud: '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M7 18a4 4 0 0 1-.4-7.98 5.5 5.5 0 0 1 10.7 1.23A3.4 3.4 0 0 1 16.6 18z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
 };
 
 // ---------------------------------------------------------------- helpers
@@ -115,7 +123,7 @@ function entryHtml(rec) {
         <div class="entry-cap">${timeLabel(rec.createdAt)}<br>${fmtDuration(rec.durationSec)}</div>
       </div>
       <div class="entry-body">
-        <div class="entry-title">${escapeHtml(title)}</div>
+        <div class="entry-title">${escapeHtml(title)}${rec.cloud ? `<span class="shared-mark" title="In the cloud">${ICON.cloud}</span>` : ''}</div>
         <div class="entry-preview ${pv.cls}">${escapeHtml(pv.text)}</div>
       </div>
       <div class="entry-actions">
@@ -232,11 +240,25 @@ function renderHistory() {
   const groups = $('groups');
   const empty = $('emptyState');
   const searchEmpty = $('searchEmpty');
+  const connected = Boolean(state.settings.cloudConnected);
+
+  // The view switcher only exists once sharing is connected.
+  $('viewSeg').hidden = !connected;
+  if (!connected && state.view !== 'mine') state.view = 'mine';
+
+  if (state.view === 'inbox') {
+    renderInbox();
+    return;
+  }
+  $('inboxGroups').hidden = true;
+  $('inboxEmpty').hidden = true;
+  groups.hidden = false;
 
   // search + filters only make sense once there's something to look through
   const hasRecords = state.records.length > 0;
   const toolbar = document.querySelector('.toolbar');
-  if (toolbar) toolbar.hidden = !hasRecords;
+  if (toolbar) toolbar.hidden = !hasRecords && !connected;
+  document.querySelector('.search').hidden = !hasRecords;
   $('filters').hidden = !hasRecords;
 
   if (!hasRecords) {
@@ -287,6 +309,154 @@ function upsertRecord(rec) {
   else state.records[idx] = { ...state.records[idx], ...rec };
   renderHistory();
   if (state.selectedId === rec.id) renderDetail(state.records.find((r) => r.id === rec.id));
+}
+
+// ---------------------------------------------------------------- inbox
+// "Shared with me": recordings friends shared to this user. Items are pushed
+// from main (poll) via inbox:state; audio is downloaded on demand and played
+// from a local cache like any recording.
+
+function setView(view) {
+  state.view = view;
+  document.querySelectorAll('#viewSeg button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+  renderHistory();
+}
+
+function inboxEntryHtml(item) {
+  const preview = (item.transcript?.text || '').trim() || 'No transcript.';
+  return `
+    <div class="entry inbox-entry${item.seen ? '' : ' unseen'}" data-share="${escapeHtml(item.shareId)}" role="button" tabindex="0">
+      <div class="entry-meta">
+        <button class="entry-play" data-act="playShared" title="Play" aria-label="Play recording">${ICON.play}${ICON.pause}</button>
+        <div class="entry-cap">${fmtDuration(item.durationSec)}</div>
+      </div>
+      <div class="entry-body">
+        <div class="entry-title">${item.seen ? '' : '<span class="unread-dot inline"></span>'}${escapeHtml(item.title || 'Untitled')}</div>
+        <div class="entry-from">from ${escapeHtml(item.from)} · ${dayLabel(item.createdAt)}</div>
+        <div class="entry-preview">${escapeHtml(preview)}</div>
+      </div>
+    </div>`;
+}
+
+function renderInbox() {
+  const toolbar = document.querySelector('.toolbar');
+  if (toolbar) toolbar.hidden = false;
+  document.querySelector('.search').hidden = true;
+  $('filters').hidden = true;
+  $('groups').hidden = true;
+  $('emptyState').hidden = true;
+  $('searchEmpty').hidden = true;
+
+  const list = $('inboxGroups');
+  const items = state.inbox.items;
+  $('inboxEmpty').hidden = items.length > 0;
+  list.hidden = false;
+  list.innerHTML = items.length
+    ? `<section class="group"><div class="group-head">Shared with me</div>${items.map(inboxEntryHtml).join('')}</section>`
+    : '';
+  updatePlayingUI();
+}
+
+function inboxItem(shareId) {
+  return state.inbox.items.find((i) => i.shareId === shareId);
+}
+
+// Download (or reuse cached) audio for a shared item and load it into the
+// shared <audio> element. Returns true when ready.
+async function loadSharedAudio(shareId) {
+  const key = `shared:${shareId}`;
+  if (state.audioId === key && audio.src) return true;
+  const res = await api.inboxPlay(shareId);
+  if (!res.ok) {
+    toast(res.reason === 'offline' ? 'You’re offline — can’t fetch this recording.' : 'Could not fetch this recording.');
+    return false;
+  }
+  audio.src = fileUrl(res.localPath);
+  state.audioId = key;
+  audio.load();
+  return true;
+}
+
+async function togglePlayShared(shareId) {
+  if (!(await loadSharedAudio(shareId))) return;
+  if (audio.paused) {
+    try {
+      await audio.play();
+    } catch {
+      /* ignore */
+    }
+  } else {
+    audio.pause();
+  }
+  updatePlayingUI();
+  const item = inboxItem(shareId);
+  if (item && !item.seen) api.inboxMarkSeen(shareId);
+}
+
+// Open a shared recording in the detail sheet, read-only.
+async function openSharedDetail(shareId) {
+  const item = inboxItem(shareId);
+  if (!item) return;
+  state.sharedDetail = item;
+  state.selectedId = null;
+  renderSharedDetail(item);
+  $('detail').classList.add('open', 'shared');
+  $('detail').setAttribute('aria-hidden', 'false');
+  app.classList.add('sheet-open');
+  if (!item.seen) api.inboxMarkSeen(shareId);
+  await loadSharedAudio(shareId);
+  $('scrubFill').style.width = '0%';
+  $('scrubKnob').style.left = '0%';
+  $('ptime').textContent = fmtDuration(0);
+  updatePlayingUI();
+}
+
+// Turn view for a shared transcript payload ({ format, text, speakers?, segments? }).
+function sharedTurnsHtml(payload) {
+  if (payload?.format !== 'segments' || !Array.isArray(payload.segments)) return '';
+  const speakers = Array.isArray(payload.speakers) ? payload.speakers : [];
+  const hues = new Map();
+  let i = 0;
+  for (const s of speakers) hues.set(s.label, s.isUser ? USER_HUE : SPEAKER_HUES[i++ % SPEAKER_HUES.length]);
+  const turns = [];
+  for (const seg of payload.segments) {
+    if (!seg || !seg.text) continue;
+    const last = turns[turns.length - 1];
+    if (last && last.speaker === seg.speaker) last.texts.push(seg.text);
+    else turns.push({ speaker: seg.speaker || 'Speaker', texts: [seg.text] });
+  }
+  if (!turns.length) return '';
+  return (
+    `<div class="turns">` +
+    turns
+      .map((t) => {
+        if (!hues.has(t.speaker)) hues.set(t.speaker, SPEAKER_HUES[i++ % SPEAKER_HUES.length]);
+        return `
+      <div class="turn" style="--sp-h: ${hues.get(t.speaker)}">
+        <span class="speaker-chip">${escapeHtml(t.speaker)}</span>
+        <div class="turn-text">${escapeHtml(t.texts.join(' '))}</div>
+      </div>`;
+      })
+      .join('') +
+    `</div>`
+  );
+}
+
+function renderSharedDetail(item) {
+  const title = $('detailTitle');
+  title.value = item.title || 'Untitled';
+  title.readOnly = true;
+  $('detailSub').textContent = `from ${item.from}  ·  ${new Date(item.recordedAt || item.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}  ·  ${fmtDuration(item.durationSec)}`;
+  const bodyEl = $('transcriptBody');
+  bodyEl.classList.remove('placeholder');
+  const turns = sharedTurnsHtml(item.transcript);
+  const text = (item.transcript?.text || '').trim();
+  if (turns) bodyEl.innerHTML = turns;
+  else if (text) bodyEl.textContent = text;
+  else {
+    bodyEl.textContent = 'No transcript came with this recording.';
+    bodyEl.classList.add('placeholder');
+  }
 }
 
 // ---------------------------------------------------------------- recording
@@ -538,6 +708,13 @@ async function copyTranscript(id) {
   toast('Transcript copied.');
 }
 
+async function copySharedTranscript(item) {
+  const text = (item.transcript?.text || '').trim();
+  if (!text) return toast('No transcript to copy.');
+  await navigator.clipboard.writeText(text);
+  toast('Transcript copied.');
+}
+
 async function exportTranscriptFor(id) {
   const rec = recordById(id);
   if (!rec || !(rec.transcript || '').trim()) return toast('No transcript to save yet.');
@@ -547,7 +724,10 @@ async function exportTranscriptFor(id) {
 }
 
 async function deleteRecording(id) {
-  await api.deleteRecording(id);
+  const rec = recordById(id);
+  const hasCloud = Boolean(rec && rec.cloud);
+  if (hasCloud && !confirm('Delete this recording? Its cloud copy and all shares will be removed too.')) return;
+  await api.deleteRecording(id, hasCloud);
   if (state.audioId === id) {
     audio.pause();
     audio.removeAttribute('src');
@@ -563,8 +743,12 @@ async function deleteRecording(id) {
 function openRowMenu(id, anchor) {
   const menu = $('rowMenu');
   menu.dataset.id = id;
+  const shareItem = state.settings.cloudConnected
+    ? `<button class="menu-item" data-act="share">${ICON.share} Share…</button>`
+    : '';
   menu.innerHTML = `
     <button class="menu-item" data-act="rename">${ICON.rename} Rename…</button>
+    ${shareItem}
     <button class="menu-item" data-act="copy">${ICON.copy} Copy transcript</button>
     <button class="menu-item" data-act="export">${ICON.save} Save transcript…</button>
     <button class="menu-item" data-act="reveal">${ICON.finder} Show in Finder</button>
@@ -580,11 +764,181 @@ function closeRowMenu() {
   $('rowMenu').hidden = true;
 }
 
+// ---------------------------------------------------------------- share sheet
+// Opt-in per recording: nothing touches the cloud until Share is applied here.
+// The checklist mirrors current share state; applying commits the diff (new
+// checks share, cleared checks revoke), and the link toggle mints/revokes the
+// public web link.
+
+function openShareSheet(id) {
+  const rec = recordById(id);
+  if (!rec) return;
+  state.shareFor = id;
+  state.shareInfo = null;
+  $('shareTitle').textContent = `Share “${rec.title || timeLabel(rec.createdAt)}”`;
+  $('shareSub').textContent = '';
+  $('shareProgress').textContent = '';
+  $('shareSheet').classList.add('open');
+  $('shareSheet').setAttribute('aria-hidden', 'false');
+  app.classList.add('sheet-open');
+
+  if (!state.settings.cloudConnected) {
+    $('shareActions').hidden = true;
+    $('shareBody').innerHTML =
+      '<div class="share-nudge">Sharing isn’t connected yet. <span class="link" id="shareGoSettings">Connect in Settings</span> with your invite code.</div>';
+    const go = $('shareGoSettings');
+    if (go) go.onclick = () => {
+      closeShareSheet();
+      openSettings();
+    };
+    return;
+  }
+
+  $('shareBody').innerHTML = '<div class="share-nudge">Loading…</div>';
+  $('shareActions').hidden = true;
+  Promise.all([api.shareStatus(id), api.shareProfiles()]).then(([info, roster]) => {
+    if (state.shareFor !== id) return; // sheet moved on
+    if (!info.ok || !roster.ok) {
+      $('shareBody').innerHTML = `<div class="share-nudge">${
+        info.reason === 'offline' || roster.reason === 'offline'
+          ? 'You’re offline — sharing needs a connection.'
+          : 'Could not load sharing details.'
+      }</div>`;
+      return;
+    }
+    state.shareInfo = info;
+    state.shareRoster = roster.profiles;
+    renderShareSheet();
+  });
+}
+
+function renderShareSheet() {
+  const info = state.shareInfo;
+  const sharedIds = new Set((info.sharedWith || []).map((p) => p.id));
+  const people = state.shareRoster.length
+    ? state.shareRoster
+        .map(
+          (p) => `
+      <label class="share-person">
+        <span class="share-avatar">${escapeHtml((p.displayName || '?')[0].toUpperCase())}</span>
+        <span class="share-name">${escapeHtml(p.displayName)}</span>
+        <input type="checkbox" class="share-check" data-id="${escapeHtml(p.id)}" ${sharedIds.has(p.id) ? 'checked' : ''} />
+      </label>`
+        )
+        .join('')
+    : '<p class="field-hint">No one else has connected yet.</p>';
+
+  $('shareBody').innerHTML = `
+    <div class="share-section">
+      <div class="share-section-title">People</div>
+      <div class="share-people">${people}</div>
+    </div>
+    <div class="share-section">
+      <div class="share-section-title">Public link</div>
+      <label class="switch-row share-link-row">
+        <span class="switch-text">
+          <span class="switch-title">Anyone with the link</span>
+          <span class="switch-sub">A web page with the player and transcript. Revoke any time.</span>
+        </span>
+        <input type="checkbox" id="shareLinkToggle" class="switch" ${info.link ? 'checked' : ''} />
+      </label>
+      ${info.link ? `<div class="share-url-row"><input type="text" readonly id="shareUrl" value="${escapeHtml(info.link.url)}" /><button class="ghost" id="copyLinkBtn">Copy</button></div>` : ''}
+    </div>`;
+  $('shareActions').hidden = false;
+  $('shareRemoveCloudBtn').hidden = !info.uploaded;
+  $('shareApplyBtn').disabled = false;
+  $('shareApplyBtn').textContent = info.uploaded ? 'Apply' : 'Share';
+  const copyBtn = $('copyLinkBtn');
+  if (copyBtn) {
+    copyBtn.onclick = async () => {
+      await navigator.clipboard.writeText(info.link.url);
+      toast('Link copied.');
+    };
+  }
+}
+
+async function applyShare() {
+  const id = state.shareFor;
+  const info = state.shareInfo;
+  if (!id || !info) return;
+  const checked = [...document.querySelectorAll('.share-check')].filter((c) => c.checked).map((c) => c.dataset.id);
+  const before = new Set((info.sharedWith || []).map((p) => p.id));
+  const toAdd = checked.filter((rid) => !before.has(rid));
+  const toRemove = [...before].filter((rid) => !checked.includes(rid));
+  const wantLink = Boolean($('shareLinkToggle')?.checked);
+  const makeLink = wantLink && !info.link;
+
+  const btn = $('shareApplyBtn');
+  btn.disabled = true;
+  let result = info;
+  if (toAdd.length || makeLink || !info.uploaded) {
+    result = await api.shareCreate({ id, recipientIds: toAdd, makeLink });
+  }
+  for (const rid of toRemove) result = await api.shareRevokeUser(id, rid);
+  if (!wantLink && info.link) result = await api.shareRevokeLink(id);
+  $('shareProgress').textContent = '';
+
+  if (!result.ok) {
+    btn.disabled = false;
+    toast(
+      result.reason === 'offline'
+        ? 'You’re offline — sharing needs a connection.'
+        : result.reason === 'too_large'
+          ? 'This recording is too large to upload.'
+          : 'Sharing failed — try again.'
+    );
+    return;
+  }
+
+  state.shareInfo = result;
+  state.records = await api.listRecordings(); // pick up the record's new cloud pointer
+  renderHistory();
+  const newLink = !info.link && result.link;
+  if (newLink) {
+    await navigator.clipboard.writeText(result.link.url);
+    toast(toAdd.length ? `Shared with ${toAdd.length} · link copied.` : 'Link copied.');
+  } else if (toAdd.length || toRemove.length) {
+    toast('Sharing updated.');
+  }
+  renderShareSheet();
+}
+
+async function removeFromCloud() {
+  const id = state.shareFor;
+  if (!id) return;
+  if (!confirm('Remove this recording from the cloud? All shares and the link stop working. The local recording stays.')) return;
+  const res = await api.shareDeleteCloud(id);
+  if (!res.ok) return toast('Could not remove the cloud copy.');
+  state.records = await api.listRecordings();
+  renderHistory();
+  toast('Removed from cloud.');
+  closeShareSheet();
+}
+
+function closeShareSheet() {
+  $('shareSheet').classList.remove('open');
+  $('shareSheet').setAttribute('aria-hidden', 'true');
+  state.shareFor = null;
+  if (!$('detail').classList.contains('open') && !$('settings').classList.contains('open')) {
+    app.classList.remove('sheet-open');
+  }
+}
+
+const SHARE_PHASES = {
+  converting: 'Converting audio…',
+  uploading: 'Uploading…',
+  saving: 'Saving…',
+  downloading: 'Downloading…',
+};
+
 // ---------------------------------------------------------------- detail
 async function openDetail(id) {
   const rec = recordById(id);
   if (!rec) return;
   state.selectedId = id;
+  state.sharedDetail = null;
+  $('detail').classList.remove('shared');
+  $('detailTitle').readOnly = false;
   renderHistory();
   renderDetail(rec);
   await ensureLoaded(id);
@@ -847,11 +1201,13 @@ function startRename(id) {
 }
 
 function closeDetail() {
-  $('detail').classList.remove('open');
+  $('detail').classList.remove('open', 'shared');
   $('detail').setAttribute('aria-hidden', 'true');
+  $('detailTitle').readOnly = false;
   if (!$('settings').classList.contains('open')) app.classList.remove('sheet-open');
   audio.pause();
   state.selectedId = null;
+  state.sharedDetail = null;
   updatePlayingUI();
   renderHistory();
 }
@@ -899,6 +1255,7 @@ async function openSettings() {
   $('systemAudioToggle').checked = state.settings.systemAudio !== false;
   $('userNameInput').value = state.settings.userName || 'Me';
   updateSystemAudioStatus();
+  updateSharingSection();
   reflectThemeSeg(state.settings.theme || 'system');
   $('settings').classList.add('open');
   $('settings').setAttribute('aria-hidden', 'false');
@@ -935,6 +1292,63 @@ function updateSystemAudioStatus() {
     const h = $('blackholeHelp');
     if (h) h.onclick = () => api.openExternal('https://existential.audio/blackhole/');
   }
+}
+
+// --- sharing (invite code) --------------------------------------------------
+
+function updateSharingSection() {
+  const connected = Boolean(state.settings.cloudConnected);
+  $('sharingDisconnected').hidden = connected;
+  $('sharingConnected').hidden = !connected;
+  if (connected) $('cloudNameLabel').textContent = state.settings.cloudDisplayName || '';
+  $('cloudStatus').className = 'key-status';
+  $('cloudStatus').textContent = '';
+}
+
+const REDEEM_ERRORS = {
+  'invalid-code': 'That code wasn’t recognized.',
+  'code-already-used': 'That code was already used.',
+  'name-taken': 'That name is taken — pick another.',
+  'missing-code': 'Enter your invite code first.',
+  'missing-display-name': 'Pick a display name first.',
+  offline: 'You’re offline — connecting needs a network.',
+  not_configured: 'Sharing isn’t configured in this build.',
+};
+
+async function connectSharing() {
+  const code = $('inviteCodeInput').value.trim();
+  const name = $('displayNameInput').value.trim();
+  const status = $('cloudStatus');
+  if (!code || !name) {
+    status.className = 'key-status bad';
+    status.textContent = !code ? REDEEM_ERRORS['missing-code'] : REDEEM_ERRORS['missing-display-name'];
+    return;
+  }
+  status.className = 'key-status';
+  status.textContent = 'Connecting…';
+  const res = await api.cloudRedeem(code, name);
+  if (!res.ok) {
+    status.className = 'key-status bad';
+    status.textContent = REDEEM_ERRORS[res.reason] || 'Could not connect — try again.';
+    return;
+  }
+  await refreshSettings();
+  updateSharingSection();
+  status.className = 'key-status ok';
+  status.textContent = `Connected as ${res.displayName}.`;
+  toast('Sharing connected.');
+  renderHistory();
+}
+
+async function signOutSharing() {
+  await api.cloudSignOut();
+  await refreshSettings();
+  state.inbox = { items: [], unread: 0 };
+  $('inboxDot').hidden = true;
+  if (state.view === 'inbox') setView('mine');
+  updateSharingSection();
+  renderHistory();
+  toast('Signed out of sharing.');
 }
 
 async function saveKey() {
@@ -1355,11 +1769,47 @@ function wireEvents() {
     const act = item.dataset.act;
     closeRowMenu();
     if (act === 'rename') startRename(id);
+    else if (act === 'share') openShareSheet(id);
     else if (act === 'copy') copyTranscript(id);
     else if (act === 'export') exportTranscriptFor(id);
     else if (act === 'reveal') api.revealRecording(id);
     else if (act === 'delete') deleteRecording(id);
   });
+
+  // view switcher (Recordings / Shared with me)
+  $('viewSeg').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (btn) setView(btn.dataset.view);
+  });
+
+  // inbox list (delegated): play inline or open the read-only detail
+  const inboxGroups = $('inboxGroups');
+  inboxGroups.addEventListener('click', (e) => {
+    const entry = e.target.closest('.inbox-entry');
+    if (!entry) return;
+    const shareId = entry.dataset.share;
+    if (e.target.closest('[data-act="playShared"]')) {
+      e.stopPropagation();
+      togglePlayShared(shareId);
+      return;
+    }
+    openSharedDetail(shareId);
+  });
+  inboxGroups.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const entry = e.target.closest('.inbox-entry');
+    if (entry) openSharedDetail(entry.dataset.share);
+  });
+
+  // share sheet
+  $('shareBack').addEventListener('click', closeShareSheet);
+  $('shareApplyBtn').addEventListener('click', applyShare);
+  $('shareRemoveCloudBtn').addEventListener('click', removeFromCloud);
+
+  // sharing settings
+  $('connectBtn').addEventListener('click', connectSharing);
+  $('displayNameInput').addEventListener('keydown', (e) => e.key === 'Enter' && connectSharing());
+  $('signOutBtn').addEventListener('click', signOutSharing);
 
   // speaker chips → rename popover (delegated; legacy chips are spans, not buttons)
   $('transcriptBody').addEventListener('click', (e) => {
@@ -1377,7 +1827,11 @@ function wireEvents() {
   $('speakerNameInput').addEventListener('blur', commitSpeakerRename);
 
   // detail actions
-  $('copyBtn').addEventListener('click', () => state.selectedId && copyTranscript(state.selectedId));
+  $('copyBtn').addEventListener('click', () => {
+    if (state.sharedDetail) copySharedTranscript(state.sharedDetail);
+    else if (state.selectedId) copyTranscript(state.selectedId);
+  });
+  $('shareBtn').addEventListener('click', () => state.selectedId && openShareSheet(state.selectedId));
   $('exportBtn').addEventListener('click', () => state.selectedId && exportTranscriptFor(state.selectedId));
   $('retranscribeBtn').addEventListener('click', () => state.selectedId && reTranscribe(state.selectedId));
   $('revealBtn').addEventListener('click', () => state.selectedId && api.revealRecording(state.selectedId));
@@ -1407,6 +1861,7 @@ function wireEvents() {
       if (!$('deviceMenu').hidden) return closeDeviceMenu();
       if (!$('rowMenu').hidden) return closeRowMenu();
       if (!$('speakerMenu').hidden) return closeSpeakerMenu();
+      if ($('shareSheet').classList.contains('open')) return closeShareSheet();
       if ($('settings').classList.contains('open')) return closeSettings();
       if ($('detail').classList.contains('open')) return closeDetail();
     }
@@ -1451,6 +1906,24 @@ function wireEvents() {
       bodyEl.textContent = transcribingLabel(id);
     }
   });
+
+  // cloud sharing events
+  api.onInboxState(({ items, unread, signedOut }) => {
+    state.inbox = { items: items || [], unread: unread || 0 };
+    $('inboxDot').hidden = !state.inbox.unread;
+    if (signedOut && state.settings.cloudConnected) {
+      refreshSettings().then(() => {
+        updateSharingSection();
+        renderHistory();
+      });
+      toast('Sharing session expired — reconnect in Settings.');
+    }
+    if (state.view === 'inbox') renderInbox();
+  });
+  api.onInboxOpen(() => setView('inbox'));
+  api.onShareProgress(({ id, phase }) => {
+    if (state.shareFor === id) $('shareProgress').textContent = SHARE_PHASES[phase] || '';
+  });
 }
 
 // ---------------------------------------------------------------- init
@@ -1466,6 +1939,16 @@ async function init() {
 
   state.records = await api.listRecordings();
   renderHistory();
+
+  // Seed the inbox from main's last poll (it also pushes inbox:state updates).
+  api
+    .inboxList()
+    .then(({ items, unread }) => {
+      state.inbox = { items: items || [], unread: unread || 0 };
+      $('inboxDot').hidden = !state.inbox.unread;
+      if (state.view === 'inbox') renderInbox();
+    })
+    .catch(() => {});
 
   await bootstrapDevices();
 }

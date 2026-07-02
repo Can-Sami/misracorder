@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; media-src 'self' file: blob: data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' blob:; worker-src 'self' blob:; connect-src 'self';"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Misracorder</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app" id="app">
+      <!-- Title bar (draggable; native traffic lights sit at the left via hiddenInset) -->
+      <header class="titlebar">
+        <span class="wordmark">
+          <svg class="wordmark-mark" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+            <path d="M4 12c1.6 0 1.6-4 3.2-4s1.6 8 3.2 8 1.6-7 3.2-7 1.6 5 3.2 5 1.6-3 1.9-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Misracorder
+        </span>
+        <button class="icon-btn titlebar-action" id="settingsBtn" title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" fill="none" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M19.4 13a7.6 7.6 0 0 0 .05-2l1.6-1.25-1.9-3.3-1.96.66a7.5 7.5 0 0 0-1.73-1l-.3-2.05h-3.8l-.3 2.05a7.5 7.5 0 0 0-1.73 1l-1.96-.66-1.9 3.3L4.55 11a7.6 7.6 0 0 0 0 2l-1.6 1.25 1.9 3.3 1.96-.66a7.5 7.5 0 0 0 1.73 1l.3 2.05h3.8l.3-2.05a7.5 7.5 0 0 0 1.73-1l1.96.66 1.9-3.3L19.4 13Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </header>
+
+      <main class="stage">
+        <!-- Record bar -->
+        <section class="hero">
+          <button class="record" id="recordBtn" aria-label="Start recording">
+            <span class="record-aura" aria-hidden="true"></span>
+            <span class="record-glow" aria-hidden="true"></span>
+            <span class="record-orb" aria-hidden="true"></span>
+          </button>
+
+          <div class="hero-main">
+            <div class="hero-idle">
+              <p class="hint-text">Press to record</p>
+              <kbd class="shortcut-chip" id="shortcutChip"></kbd>
+            </div>
+            <div class="hero-live" aria-hidden="true">
+              <canvas class="waveform" id="waveform" width="900" height="96"></canvas>
+            </div>
+          </div>
+
+          <div class="hero-right">
+            <span class="timer" id="timer" hidden>0:00</span>
+            <button class="ghost cancel-btn" id="cancelBtn" hidden>Cancel</button>
+            <button class="device-pill" id="devicePill" aria-haspopup="listbox">
+              <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+                <rect x="9.5" y="3" width="5" height="10" rx="2.5" fill="currentColor"/>
+                <path d="M6.5 11a5.5 5.5 0 0 0 11 0M12 16.5v3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              <span class="device-name" id="deviceName">Default microphone</span>
+              <svg class="chev" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </section>
+
+        <!-- No-key nudge -->
+        <button class="key-nudge" id="keyNudge" hidden>
+          Add a Gemini API key to enable transcription
+          <span aria-hidden="true">→</span>
+        </button>
+
+        <!-- Search -->
+        <div class="toolbar">
+          <div class="search">
+            <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.7"/>
+              <path d="M20 20l-3.6-3.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+            <input id="searchInput" type="text" placeholder="Search recordings" spellcheck="false" autocomplete="off" />
+            <kbd class="kbd-hint" id="kbdHint">⌘F</kbd>
+            <button class="search-clear" id="searchClear" hidden aria-label="Clear search">
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filters" id="filters">
+          <div class="chips">
+            <button class="chip active" data-period="all">All</button>
+            <button class="chip" data-period="today">Today</button>
+            <button class="chip" data-period="week">This week</button>
+            <button class="chip" data-period="month">This month</button>
+          </div>
+          <div class="filters-right">
+            <button class="chip semantic-chip" id="semanticToggle" title="Search by meaning, not just keywords">
+              <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6zM18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8z" fill="currentColor"/></svg>
+              Semantic
+            </button>
+            <button class="sort-btn" id="sortBtn" title="Toggle sort order">
+              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+                <path d="M6 5v14m0 0l-3-3m3 3l3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 7h8M12 12h6M12 17h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+              <span id="sortLabel">Newest</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- History -->
+        <section class="history" id="history" aria-label="Recordings">
+          <div class="empty" id="emptyState">
+            <div class="empty-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22">
+                <path d="M4 12c2 0 2-5 4-5s2 10 4 10 2-9 4-9 2 4 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <p class="empty-title">No recordings yet</p>
+            <p class="empty-sub">Press record and your captures will appear here, filed by day.</p>
+          </div>
+          <div class="empty" id="searchEmpty" hidden>
+            <p class="empty-title">No matches</p>
+            <p class="empty-sub">Nothing in your transcripts matches that search.</p>
+          </div>
+          <div class="groups" id="groups"></div>
+        </section>
+      </main>
+
+      <!-- Transcript detail (slides over) -->
+      <aside class="sheet detail" id="detail" aria-hidden="true">
+        <header class="sheet-head">
+          <button class="icon-btn back-btn" id="detailBack" aria-label="Back">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="sheet-title">
+            <input class="dt-main dt-main-input" id="detailTitle" placeholder="Untitled" spellcheck="false" aria-label="Recording title" />
+            <div class="dt-sub" id="detailSub"></div>
+          </div>
+        </header>
+
+        <div class="player" id="player">
+          <button class="play-btn" id="playBtn" aria-label="Play">
+            <svg class="ic-play" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+            <svg class="ic-pause" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 5h3v14H7zM14 5h3v14h-3z" fill="currentColor"/></svg>
+          </button>
+          <div class="scrub" id="scrub"><div class="scrub-fill" id="scrubFill"></div><div class="scrub-knob" id="scrubKnob"></div></div>
+          <span class="ptime" id="ptime">0:00</span>
+        </div>
+
+        <div class="transcript-wrap">
+          <div class="transcript" id="transcriptBody"></div>
+        </div>
+
+        <footer class="sheet-actions">
+          <button class="ghost" id="copyBtn">Copy</button>
+          <button class="ghost" id="exportBtn">Save transcript…</button>
+          <button class="ghost" id="retranscribeBtn">Re-transcribe</button>
+          <button class="ghost" id="revealBtn">Show in Finder</button>
+          <button class="ghost danger" id="deleteBtn">Delete</button>
+        </footer>
+      </aside>
+
+      <!-- Settings (slides over) -->
+      <aside class="sheet settings" id="settings" aria-hidden="true">
+        <header class="sheet-head">
+          <button class="icon-btn back-btn" id="settingsBack" aria-label="Back">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="sheet-title"><div class="dt-main">Settings</div></div>
+        </header>
+
+        <div class="settings-body">
+          <div class="field">
+            <label for="apiKeyInput">Gemini API key</label>
+            <div class="key-row">
+              <input type="password" id="apiKeyInput" placeholder="AIza…" autocomplete="off" spellcheck="false" />
+              <button class="solid" id="saveKeyBtn">Save</button>
+            </div>
+            <p class="field-hint">Stored encrypted on this Mac. Create one at <span class="link" id="studioLink">aistudio.google.com/apikey</span>.</p>
+            <div class="key-status" id="keyStatus"></div>
+          </div>
+
+          <div class="field">
+            <label for="modelSelect">Model</label>
+            <select id="modelSelect">
+              <option value="gemini-3.5-flash">gemini-3.5-flash — newest, balanced (recommended)</option>
+              <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite — fastest / cheapest</option>
+              <option value="gemini-2.5-flash">gemini-2.5-flash — reliable (previous)</option>
+              <option value="gemini-2.5-pro">gemini-2.5-pro — most accurate, slower</option>
+            </select>
+            <p class="field-hint">Used for transcription. Flash is the right default.</p>
+          </div>
+
+          <div class="field">
+            <label>Recording shortcut</label>
+            <div class="shortcut-row">
+              <kbd class="shortcut-display" id="shortcutDisplay">⌥⌘R</kbd>
+              <button class="ghost" id="changeShortcutBtn">Change</button>
+              <button class="ghost" id="resetShortcutBtn">Reset</button>
+            </div>
+            <p class="field-hint">Press this from anywhere to start or stop recording.</p>
+            <div class="key-status" id="shortcutStatus"></div>
+          </div>
+
+          <div class="field">
+            <label>Audio</label>
+            <label class="switch-row">
+              <span class="switch-text">
+                <span class="switch-title">Record system audio</span>
+                <span class="switch-sub">Capture your Mac's audio output alongside your mic and label who said what — great for calls. On macOS this uses a free virtual device (BlackHole).</span>
+              </span>
+              <input type="checkbox" id="systemAudioToggle" class="switch" />
+            </label>
+            <div class="key-status" id="systemAudioStatus"></div>
+          </div>
+
+          <div class="field">
+            <label for="userNameInput">Your name (for call transcripts)</label>
+            <input type="text" id="userNameInput" placeholder="Me" spellcheck="false" maxlength="40" autocomplete="off" />
+            <p class="field-hint">In call transcripts, your voice (the microphone) is labeled with this; the other side is labeled with the app's name.</p>
+          </div>
+
+          <div class="field">
+            <label>Appearance</label>
+            <div class="segmented" id="themeSeg" role="group" aria-label="Theme">
+              <button data-theme="system">System</button>
+              <button data-theme="light">Light</button>
+              <button data-theme="dark">Dark</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Recordings folder</label>
+            <button class="ghost wide" id="openFolderBtn">Open recordings folder</button>
+            <p class="field-hint" id="folderHint"></p>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Device popover -->
+      <div class="popover device-menu" id="deviceMenu" role="listbox" hidden></div>
+      <!-- Row "more" popover -->
+      <div class="popover row-menu" id="rowMenu" hidden></div>
+
+      <!-- Shared audio element (inline play + detail player) -->
+      <audio id="audio" preload="metadata"></audio>
+
+      <!-- Toast -->
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,76 @@
+{
+  "name": "misracorder",
+  "productName": "Misracorder",
+  "version": "1.4.0",
+  "description": "Record audio on your Mac and transcribe it with Gemini, filed by date.",
+  "type": "commonjs",
+  "main": "src/main/main.js",
+  "author": "Can",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "icon": "electron build/make-icon.js",
+    "dist": "electron-builder --mac",
+    "pack": "electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.misracorder.app",
+    "productName": "Misracorder",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "!build/make-icon.js",
+      "!build/icon.html"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/audio-helper",
+        "to": "audio-helper"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Misracorder records your microphone to create transcribed voice notes.",
+        "NSScreenCaptureUsageDescription": "Misracorder can optionally record your Mac's audio output to capture both sides of a call."
+      }
+    },
+    "dmg": {
+      "title": "Misracorder ${version}",
+      "contents": [
+        {
+          "x": 150,
+          "y": 200,
+          "type": "file"
+        },
+        {
+          "x": 420,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^42.5.0",
+    "electron-builder": "^26.15.3"
+  }
+}

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+out/
+.DS_Store
+*.log
+# Local user data should never be committed
+Recordings/
+recordings.json
+.env
